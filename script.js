@@ -69,6 +69,11 @@ class WhatsAppBlastApp {
             document.getElementById('campaignDetailsModal').classList.remove('active');
         });
 
+        // QR Modal close button
+        document.getElementById('closeQrModal').addEventListener('click', () => {
+            document.getElementById('qrModal').classList.remove('active');
+        });
+
         // Header connection status click handler
         const connectionStatus = document.getElementById('connectionStatus');
         const logoutDropdown = document.getElementById('logoutDropdown');
@@ -187,13 +192,51 @@ class WhatsAppBlastApp {
             console.log('Connection status:', data);
             this.updateConnectionStatus(data.connected, data.phone);
             
-            if (!data.connected && data.qrImage) {
-                this.showQRCode(data.qrImage);
+            if (!data.connected) {
+                // Always show QR modal when not connected
+                if (data.qrImage) {
+                    this.showQRCode(data.qrImage);
+                } else {
+                    // Show modal with loading state if no QR yet
+                    this.showQRCode(null);
+                    // Poll for QR code
+                    this.pollForQRCode();
+                }
             }
         } catch (error) {
             console.error('Connection check error:', error);
             this.updateConnectionStatus(false);
+            // Show modal even on error, so user can retry
+            this.showQRCode(null);
         }
+    }
+
+    async pollForQRCode() {
+        // Poll every 2 seconds for QR code when not connected
+        const pollInterval = setInterval(async () => {
+            try {
+                const response = await fetch('/status');
+                const data = await response.json();
+                
+                if (data.connected) {
+                    // Connected! Clear polling and update status
+                    clearInterval(pollInterval);
+                    this.updateConnectionStatus(true, data.phone);
+                    document.getElementById('qrModal').classList.remove('active');
+                } else if (data.qrImage) {
+                    // QR code is ready, show it
+                    this.showQRCode(data.qrImage);
+                }
+            } catch (error) {
+                console.error('QR polling error:', error);
+                // Continue polling, don't stop on error
+            }
+        }, 2000);
+
+        // Stop polling after 5 minutes
+        setTimeout(() => {
+            clearInterval(pollInterval);
+        }, 300000);
     }
 
     async logoutWhatsApp() {
@@ -278,37 +321,51 @@ class WhatsAppBlastApp {
     showQRCode(qrImageData) {
         const qrModal = document.getElementById('qrModal');
         const qrContainer = document.getElementById('qrCode');
-        qrContainer.innerHTML = '';
+        
+        // Always show the modal
+        qrModal.classList.add('active');
         
         if (qrImageData) {
             // Create QR code image
+            qrContainer.innerHTML = '';
             const qrImage = document.createElement('img');
             qrImage.src = qrImageData;
             qrImage.style.width = '256px';
             qrImage.style.height = '256px';
             qrImage.style.border = '1px solid #ddd';
             qrImage.style.borderRadius = '8px';
+            qrImage.style.margin = '20px auto';
+            qrImage.style.display = 'block';
+            
             qrImage.onerror = () => {
                 // Fallback to text if image fails
-                qrContainer.innerHTML = '<div style="padding: 20px; background: #f5f5f5; border-radius: 8px; font-family: monospace; font-size: 12px; word-break: break-all;">QR Code data available. Please check console or use WhatsApp QR scanner.</div>';
+                qrContainer.innerHTML = '<div style="padding: 20px; background: #f5f5f5; border-radius: 8px; font-family: monospace; font-size: 12px; word-break: break-all;">QR Code error. Please refresh and try again.</div>';
             };
+            
+            const instructions = document.createElement('p');
+            instructions.innerHTML = '📱 <strong>Scan this QR code with your WhatsApp</strong><br><small>Open WhatsApp → Settings → Linked Devices → Link a Device</small>';
+            instructions.style.textAlign = 'center';
+            instructions.style.marginTop = '15px';
+            
+            qrContainer.innerHTML = '';
             qrContainer.appendChild(qrImage);
+            qrContainer.appendChild(instructions);
         } else {
-            // Show loading or error message
-            qrContainer.innerHTML = '<div style="padding: 20px; background: #f5f5f5; border-radius: 8px;">QR Code is being generated...</div>';
+            // Show loading state
+            qrContainer.innerHTML = `
+                <div style="text-align: center; padding: 40px;">
+                    <div style="display: inline-block; width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #25d366; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px;"></div>
+                    <p><strong>Connecting to WhatsApp...</strong></p>
+                    <p><small>QR code will appear here in a moment</small></p>
+                </div>
+                <style>
+                    @keyframes spin {
+                        0% { transform: rotate(0deg); }
+                        100% { transform: rotate(360deg); }
+                    }
+                </style>
+            `;
         }
-        
-        qrModal.classList.add('active');
-        
-        // Check connection status periodically
-        const checkInterval = setInterval(() => {
-            this.checkConnection().then(() => {
-                if (this.isConnected) {
-                    qrModal.classList.remove('active');
-                    clearInterval(checkInterval);
-                }
-            });
-        }, 2000);
     }
 
     handleDragOver(e) {
