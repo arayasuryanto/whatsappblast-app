@@ -1,0 +1,15 @@
+{
+  "name": "whatsappblast-demo",
+  "version": "1.0.0",
+  "description": "WhatsApp Blast Tool - Demo Version",
+  "main": "index.html",
+  "scripts": {
+    "build": "echo 'Static files - no build needed'",
+    "start": "echo 'This is a static demo. For full functionality, run the Node.js version.'"
+  },
+  "keywords": ["whatsapp", "demo", "static"],
+  "author": "Araya Suryanto",
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {}
+}

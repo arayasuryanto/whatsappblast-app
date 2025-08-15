@@ -5,7 +5,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node server.js",
-    "build": "echo 'Frontend files are already built' && ls frontend/",
+    "build": "echo 'Static demo files ready for deployment' && ls frontend/",
+    "build:netlify": "cd frontend && echo 'Netlify demo build complete'",
     "dev": "node server.js"
   },
   "keywords": ["whatsapp", "bulk messaging", "marketing", "automation"],
