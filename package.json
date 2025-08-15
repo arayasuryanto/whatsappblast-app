@@ -1,0 +1,25 @@
+{
+  "name": "whatsappblast-app",
+  "version": "1.0.0",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js",
+    "build": "echo 'Frontend files are already built' && ls frontend/",
+    "dev": "node server.js"
+  },
+  "keywords": ["whatsapp", "bulk messaging", "marketing", "automation"],
+  "author": "Araya Suryanto",
+  "license": "MIT",
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.18",
+    "axios": "^1.11.0",
+    "body-parser": "^2.2.0",
+    "express": "^5.1.0",
+    "multer": "^2.0.2",
+    "qrcode": "^1.5.4",
+    "qrcode-terminal": "^0.12.0",
+    "xlsx": "^0.18.5"
+  },
+  "description": ""
+}

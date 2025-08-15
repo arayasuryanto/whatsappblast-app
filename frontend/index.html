@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp Blast Tool</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-left">
+                <button class="home-btn" id="homeBtn" title="Broadcast History">🏠</button>
+                <input type="text" id="projectName" placeholder="Enter project name..." value="">
+            </div>
+            <div class="header-center">
+                <div class="steps-indicator">
+                    <div class="step active" id="step1">
+                        <span class="step-number">1</span>
+                        <span class="step-label">Contacts</span>
+                    </div>
+                    <div class="step" id="step2">
+                        <span class="step-number">2</span>
+                        <span class="step-label">Message</span>
+                    </div>
+                    <div class="step" id="step3">
+                        <span class="step-number">3</span>
+                        <span class="step-label">Send</span>
+                    </div>
+                </div>
+            </div>
+            <div class="header-right">
+                <div class="connection-status" id="connectionStatus">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Demo Mode - WhatsApp not connected</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Demo Notice -->
+        <div class="demo-notice">
+            <div class="demo-content">
+                <h3>🚀 Demo Mode</h3>
+                <p>This is a demonstration version of the WhatsApp Blast Tool. To send actual messages, you need to run the full Node.js server locally.</p>
+                <div class="demo-actions">
+                    <a href="https://github.com/arayasuryanto/whatsappblast-app" target="_blank" class="btn-primary">View Source Code</a>
+                    <button class="btn-secondary" onclick="document.querySelector('.demo-notice').style.display='none'">Continue Demo</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Home Page -->
+            <div class="page-content active" id="homePage">
+                <div class="home-container">
+                    <div class="home-header">
+                        <h2>Campaign Dashboard</h2>
+                        <button class="btn-primary" id="newCampaignBtn">+ New Campaign</button>
+                    </div>
+                    
+                    <div class="campaign-sections">
+                        <!-- Upcoming/Scheduled -->
+                        <div class="campaign-section">
+                            <h3>📅 Scheduled Campaigns</h3>
+                            <div class="campaign-list" id="scheduledList">
+                                <div class="empty-campaigns">
+                                    <p>No scheduled campaigns</p>
+                                    <small>Campaigns scheduled for later will appear here</small>
+                                    <button class="btn-secondary btn-small" onclick="window.app && window.app.showCampaignPage()">Schedule Campaign</button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Ongoing -->
+                        <div class="campaign-section">
+                            <h3>⏳ Ongoing Campaigns</h3>
+                            <div class="campaign-list" id="ongoingList">
+                                <div class="empty-campaigns">
+                                    <p>No ongoing campaigns</p>
+                                    <small>Currently running campaigns will appear here</small>
+                                    <button class="btn-secondary btn-small" onclick="window.app && window.app.showCampaignPage()">Start Campaign</button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Completed -->
+                        <div class="campaign-section">
+                            <h3>✅ Completed Campaigns</h3>
+                            <div class="campaign-list" id="completedList">
+                                <div class="empty-campaigns">
+                                    <p>No completed campaigns yet</p>
+                                    <small>Your finished campaigns will appear here</small>
+                                    <button class="btn-secondary btn-small" onclick="window.app && window.app.showCampaignPage()">Create First Campaign</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Quick Start Section -->
+                    <div class="quick-start-section">
+                        <div class="quick-start-card">
+                            <h3>🚀 Ready to start your first campaign?</h3>
+                            <p>Create and send WhatsApp messages to your contacts with our easy-to-use campaign builder.</p>
+                            <div class="connection-check" id="homeConnectionStatus">
+                                <div class="connection-indicator">
+                                    <span class="status-dot disconnected"></span>
+                                    <span class="status-text">Demo Mode - Download for full functionality</span>
+                                </div>
+                            </div>
+                            <button class="btn-primary btn-large" id="startNewCampaignBtn">Try Demo Campaign</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Campaign Creation Flow -->
+            <div class="page-content" id="campaignPage">
+            <!-- Step 1: Contact Import -->
+            <div class="step-content active" id="contactsStep">
+                <h2>Add contacts to your campaign</h2>
+                <div class="contact-options">
+                    <div class="option-card" id="importExcel">
+                        <div class="option-icon">📁</div>
+                        <h3>Import from Excel</h3>
+                        <p>Upload Excel (.xlsx) or CSV file with customer names & phone numbers</p>
+                    </div>
+                    <div class="option-card" id="createManually">
+                        <div class="option-icon">👤</div>
+                        <h3>Create manually</h3>
+                        <p>Add contacts to the list manually, one by one</p>
+                    </div>
+                </div>
+
+                <!-- File Upload Modal -->
+                <div class="modal" id="uploadModal">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h3>Import Contacts</h3>
+                            <button class="close-btn" id="closeUpload">&times;</button>
+                        </div>
+                        <div class="upload-area" id="uploadArea">
+                            <div class="upload-icon">☁️</div>
+                            <p>Drag and drop an Excel or CSV file here</p>
+                            <span>or</span>
+                            <button class="upload-btn" id="chooseFile">Choose File</button>
+                            <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" hidden>
+                            <small>Max file size: 5MB. Required columns: Name, Phone</small>
+                        </div>
+                        <div class="file-preview" id="filePreview" style="display: none;">
+                            <div class="preview-header">
+                                <span id="fileName"></span>
+                                <span id="contactCount"></span>
+                            </div>
+                            <div class="preview-options">
+                                <label><input type="checkbox" id="removeDuplicates" checked> Remove duplicates</label>
+                                <label><input type="checkbox" id="validateNumbers" checked> Validate phone numbers</label>
+                            </div>
+                            <div class="preview-table">
+                                <table id="previewTable">
+                                    <thead>
+                                        <tr>
+                                            <th>Name</th>
+                                            <th>Phone</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                            <button class="btn-primary" id="confirmImport" onclick="handleImportClick()">Import Contacts</button>
+                            <script>
+                            function handleImportClick() {
+                                console.log('Import button clicked directly!');
+                                if (window.app && window.app.importContacts) {
+                                    window.app.importContacts();
+                                } else {
+                                    alert('App not ready. Please refresh the page.');
+                                }
+                            }
+                            </script>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Manual Add Modal -->
+                <div class="modal" id="manualModal">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h3>Add Contact Manually</h3>
+                            <button class="close-btn" id="closeManual">&times;</button>
+                        </div>
+                        <form id="manualForm">
+                            <div class="form-group">
+                                <label for="contactName">Name</label>
+                                <input type="text" id="contactName" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="contactPhone">Phone Number</label>
+                                <input type="tel" id="contactPhone" placeholder="+628123456789" required>
+                            </div>
+                            <button type="submit" class="btn-primary">Add Contact</button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Contact List -->
+                <div class="contact-list" id="contactList" style="display: none;">
+                    <div class="list-header">
+                        <h3>Contacts (<span id="totalContacts">0</span>)</h3>
+                        <button class="btn-secondary" id="addMoreContacts">Add More</button>
+                    </div>
+                    <div class="list-content">
+                        <table id="contactTable">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Phone</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                    <button class="btn-primary" id="nextToMessage" disabled>Next: Create Message</button>
+                </div>
+            </div>
+
+            <!-- Step 2: Message Editor -->
+            <div class="step-content" id="messageStep">
+                <div class="message-editor">
+                    <div class="editor-panel">
+                        <h3>Create your message</h3>
+                        <div class="form-group">
+                            <label for="messageText">Message Content</label>
+                            <div class="formatting-toolbar">
+                                <button type="button" class="format-btn" data-format="bold" title="Bold">**B**</button>
+                                <button type="button" class="format-btn" data-format="italic" title="Italic">_I_</button>
+                                <button type="button" class="format-btn" data-format="strikethrough" title="Strikethrough">~~S~~</button>
+                                <button type="button" class="format-btn" data-format="monospace" title="Monospace">```M```</button>
+                                <button type="button" class="format-btn" data-format="quote" title="Quote">></button>
+                            </div>
+                            <textarea id="messageText" placeholder="Type your WhatsApp message here..."></textarea>
+                            <small>Use {{nama}} to personalize with contact names. Formatting: **bold** _italic_ ~~strikethrough~~ ```monospace```</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="messageImage">Image (Optional)</label>
+                            <input type="file" id="messageImage" accept="image/*">
+                            <small>JPG, PNG up to 5MB</small>
+                        </div>
+                    </div>
+                    <div class="preview-panel">
+                        <h3>Preview</h3>
+                        <div class="whatsapp-preview">
+                            <div class="chat-bubble">
+                                <div class="message-image" id="previewImage" style="display: none;"></div>
+                                <div class="message-text" id="previewText">Your message will appear here...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="step-actions">
+                    <button class="btn-secondary" id="backToContacts">Back</button>
+                    <button class="btn-primary" id="nextToSend" disabled>Next: Send Options</button>
+                </div>
+            </div>
+
+            <!-- Step 3: Send Options -->
+            <div class="step-content" id="sendStep">
+                <div class="send-options">
+                    <h3>Send Options</h3>
+                    <div class="send-timing">
+                        <div class="timing-option">
+                            <input type="radio" id="sendNow" name="timing" value="now" checked>
+                            <label for="sendNow">
+                                <strong>Send Now</strong>
+                                <span>Start sending immediately</span>
+                            </label>
+                        </div>
+                        <div class="timing-option">
+                            <input type="radio" id="sendLater" name="timing" value="later">
+                            <label for="sendLater">
+                                <strong>Send Later</strong>
+                                <span>Schedule for specific time</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="schedule-picker" id="schedulePicker" style="display: none;">
+                        <div class="form-group">
+                            <label for="scheduleDate">Date</label>
+                            <input type="date" id="scheduleDate">
+                        </div>
+                        <div class="form-group">
+                            <label for="scheduleTime">Time</label>
+                            <input type="time" id="scheduleTime">
+                        </div>
+                    </div>
+                    
+                    <div class="send-summary">
+                        <h4>Campaign Summary</h4>
+                        <div class="summary-item">
+                            <span>Total Recipients:</span>
+                            <span id="summaryRecipients">0</span>
+                        </div>
+                        <div class="summary-item">
+                            <span>Message Preview:</span>
+                            <div id="summaryMessage" class="message-preview"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="step-actions">
+                    <button class="btn-secondary" id="backToMessage">Back</button>
+                    <button class="btn-primary" id="startSending">Start Demo (No actual sending)</button>
+                </div>
+            </div>
+
+            <!-- Step 4: Progress Tracking -->
+            <div class="step-content" id="progressStep">
+                <div class="progress-container">
+                    <h3>Demo Progress...</h3>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <div class="progress-stats">
+                        <span id="progressText">0 / 0 sent</span>
+                        <span id="progressPercent">0%</span>
+                    </div>
+                    <div class="sending-list">
+                        <table id="sendingTable">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Phone</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 5: Summary -->
+            <div class="step-content" id="summaryStep">
+                <div class="summary-container">
+                    <h3>Demo Complete!</h3>
+                    <div class="summary-stats">
+                        <div class="stat-card success">
+                            <div class="stat-number" id="sentCount">0</div>
+                            <div class="stat-label">Demo Sent</div>
+                        </div>
+                        <div class="stat-card error">
+                            <div class="stat-number" id="failedCount">0</div>
+                            <div class="stat-label">Demo Failed</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number" id="totalSent">0</div>
+                            <div class="stat-label">Total</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Detailed Results -->
+                    <div class="results-detail">
+                        <h4>Demo Results</h4>
+                        <div class="results-list">
+                            <table id="resultsTable">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Phone</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <div class="summary-actions">
+                        <button class="btn-secondary" id="backToStart">Back to Start</button>
+                        <button class="btn-secondary" id="downloadReport">Download Demo Report</button>
+                        <button class="btn-primary" id="newCampaign">New Demo Campaign</button>
+                    </div>
+                </div>
+            </div>
+            </div> <!-- End campaign page -->
+        </main>
+
+        <!-- QR Code Modal -->
+        <div class="modal" id="qrModal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Demo Mode</h3>
+                </div>
+                <div class="qr-container">
+                    <div id="qrCode">
+                        <p>🚀 This is a demo version. To connect to WhatsApp, download and run the full application locally.</p>
+                        <a href="https://github.com/arayasuryanto/whatsappblast-app" target="_blank" class="btn-primary">Get Full Version</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Campaign Details Modal -->
+        <div class="modal" id="campaignDetailsModal">
+            <div class="modal-content large-modal">
+                <div class="modal-header">
+                    <h3>Campaign Details</h3>
+                    <button class="close-btn" id="closeCampaignDetails">&times;</button>
+                </div>
+                <div class="campaign-details-content">
+                    <div class="campaign-info">
+                        <h4 id="campaignTitle"></h4>
+                        <div class="campaign-meta">
+                            <span id="campaignDate"></span>
+                            <span id="campaignStats"></span>
+                        </div>
+                    </div>
+                    
+                    <div class="campaign-message">
+                        <h5>Message Preview</h5>
+                        <div class="message-preview-box" id="messagePreviewBox">
+                            <div class="preview-image" id="previewImageDetails" style="display: none;"></div>
+                            <div class="preview-text" id="previewTextDetails"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="campaign-results">
+                        <h5>Results</h5>
+                        <div class="results-table-container">
+                            <table id="campaignResultsTable">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Phone</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script-demo.js"></script>
+</body>
+</html>
