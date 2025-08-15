@@ -71,7 +71,7 @@ class WhatsAppBlastDemoApp {
         const homeConnectionStatus = document.getElementById('homeConnectionStatus');
         if (homeConnectionStatus) {
             homeConnectionStatus.addEventListener('click', () => {
-                alert('Demo Mode: Download the full version to connect to WhatsApp');
+                document.getElementById('qrModal').classList.add('active');
             });
         }
 
@@ -137,7 +137,7 @@ class WhatsAppBlastDemoApp {
             const text = statusElement.querySelector('.status-text');
             
             dot.className = 'status-dot disconnected';
-            text.textContent = 'Demo Mode - WhatsApp not connected';
+            text.textContent = 'Ready to connect';
         }
         
         // Update home page status
@@ -146,7 +146,7 @@ class WhatsAppBlastDemoApp {
             const text = homeStatusElement.querySelector('.status-text');
             
             dot.className = 'status-dot disconnected';
-            text.textContent = 'Demo Mode - Download for full functionality';
+            text.textContent = 'Click to connect WhatsApp';
         }
     }
 

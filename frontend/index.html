@@ -34,19 +34,19 @@
             <div class="header-right">
                 <div class="connection-status" id="connectionStatus">
                     <span class="status-dot"></span>
-                    <span class="status-text">Demo Mode - WhatsApp not connected</span>
+                    <span class="status-text">Ready to connect</span>
                 </div>
             </div>
         </header>
 
-        <!-- Demo Notice -->
-        <div class="demo-notice">
+        <!-- Connection Notice -->
+        <div class="demo-notice" style="display: none;" id="connectionNotice">
             <div class="demo-content">
-                <h3>🚀 Demo Mode</h3>
-                <p>This is a demonstration version of the WhatsApp Blast Tool. To send actual messages, you need to run the full Node.js server locally.</p>
+                <h3>📱 Connect WhatsApp</h3>
+                <p>To send actual WhatsApp messages, you need the full server version. This interface shows how the app works.</p>
                 <div class="demo-actions">
-                    <a href="https://github.com/arayasuryanto/whatsappblast-app" target="_blank" class="btn-primary">View Source Code</a>
-                    <button class="btn-secondary" onclick="document.querySelector('.demo-notice').style.display='none'">Continue Demo</button>
+                    <a href="https://github.com/arayasuryanto/whatsappblast-app" target="_blank" class="btn-primary">Get Full Version</a>
+                    <button class="btn-secondary" onclick="document.querySelector('#connectionNotice').style.display='none'">Continue</button>
                 </div>
             </div>
         </div>
@@ -107,10 +107,10 @@
                             <div class="connection-check" id="homeConnectionStatus">
                                 <div class="connection-indicator">
                                     <span class="status-dot disconnected"></span>
-                                    <span class="status-text">Demo Mode - Download for full functionality</span>
+                                    <span class="status-text">Click to connect WhatsApp</span>
                                 </div>
                             </div>
-                            <button class="btn-primary btn-large" id="startNewCampaignBtn">Try Demo Campaign</button>
+                            <button class="btn-primary btn-large" id="startNewCampaignBtn">Start New Campaign</button>
                         </div>
                     </div>
                 </div>
@@ -391,12 +391,16 @@
         <div class="modal" id="qrModal">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h3>Demo Mode</h3>
+                    <h3>Connect WhatsApp</h3>
+                    <button class="close-btn" onclick="document.getElementById('qrModal').classList.remove('active')">&times;</button>
                 </div>
                 <div class="qr-container">
                     <div id="qrCode">
-                        <p>🚀 This is a demo version. To connect to WhatsApp, download and run the full application locally.</p>
-                        <a href="https://github.com/arayasuryanto/whatsappblast-app" target="_blank" class="btn-primary">Get Full Version</a>
+                        <p>📱 For full WhatsApp integration, deploy the complete version to a server platform like Railway or Render.</p>
+                        <p>This interface demonstrates the full user experience.</p>
+                        <div style="margin: 20px 0;">
+                            <a href="https://github.com/arayasuryanto/whatsappblast-app#deployment" target="_blank" class="btn-primary">Deployment Instructions</a>
+                        </div>
                     </div>
                 </div>
             </div>
