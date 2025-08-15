@@ -21,7 +21,8 @@ class WhatsAppBlastApp {
             this.updateStepIndicator();
             // Start with home page visible
             this.showHomePage();
-            this.checkConnection();
+            // Check connection but don't auto-show QR on page load
+            this.checkConnectionSilent();
             
             // Start scheduled campaign checker
             this.startScheduledChecker();
@@ -211,32 +212,141 @@ class WhatsAppBlastApp {
         }
     }
 
+    async checkConnectionSilent() {
+        try {
+            console.log('Checking connection silently...');
+            const response = await fetch('/status');
+            const data = await response.json();
+            console.log('Silent connection status:', data);
+            this.updateConnectionStatus(data.connected, data.phone);
+            // Don't auto-show QR on page load, wait for user to click
+        } catch (error) {
+            console.error('Silent connection check error:', error);
+            this.updateConnectionStatus(false);
+        }
+    }
+
     async pollForQRCode() {
+        let attempts = 0;
+        const maxAttempts = 150; // 5 minutes (150 * 2 seconds)
+        
+        // Clear any existing polls
+        if (this.currentPollInterval) {
+            clearInterval(this.currentPollInterval);
+        }
+        
         // Poll every 2 seconds for QR code when not connected
-        const pollInterval = setInterval(async () => {
+        this.currentPollInterval = setInterval(async () => {
+            attempts++;
+            
             try {
+                console.log(`Polling attempt ${attempts}/${maxAttempts}`);
                 const response = await fetch('/status');
                 const data = await response.json();
+                console.log('Poll result:', data);
                 
                 if (data.connected) {
                     // Connected! Clear polling and update status
-                    clearInterval(pollInterval);
+                    clearInterval(this.currentPollInterval);
+                    this.currentPollInterval = null;
                     this.updateConnectionStatus(true, data.phone);
                     document.getElementById('qrModal').classList.remove('active');
+                    return;
                 } else if (data.qrImage) {
                     // QR code is ready, show it
+                    console.log('QR code received, updating modal');
                     this.showQRCode(data.qrImage);
+                } else if (attempts > 5) {
+                    // After 10 seconds with no QR, show error with retry
+                    this.showQRCodeError();
                 }
             } catch (error) {
                 console.error('QR polling error:', error);
-                // Continue polling, don't stop on error
+                if (attempts > 3) {
+                    this.showQRCodeError();
+                }
+            }
+            
+            // Stop polling after max attempts
+            if (attempts >= maxAttempts) {
+                clearInterval(this.currentPollInterval);
+                this.currentPollInterval = null;
+                this.showQRCodeTimeout();
             }
         }, 2000);
+    }
 
-        // Stop polling after 5 minutes
-        setTimeout(() => {
-            clearInterval(pollInterval);
-        }, 300000);
+    showQRCodeError() {
+        const qrContainer = document.getElementById('qrCode');
+        qrContainer.innerHTML = `
+            <div style="text-align: center; padding: 40px;">
+                <div style="font-size: 48px; margin-bottom: 20px;">⚠️</div>
+                <p><strong>Connection Problem</strong></p>
+                <p>Having trouble connecting to WhatsApp server.</p>
+                <button onclick="window.app.retryConnection()" style="background: #25d366; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; margin-top: 15px;">
+                    🔄 Retry Connection
+                </button>
+            </div>
+        `;
+    }
+
+    showQRCodeTimeout() {
+        const qrContainer = document.getElementById('qrCode');
+        qrContainer.innerHTML = `
+            <div style="text-align: center; padding: 40px;">
+                <div style="font-size: 48px; margin-bottom: 20px;">⏱️</div>
+                <p><strong>Connection Timeout</strong></p>
+                <p>Unable to generate QR code after 5 minutes.</p>
+                <button onclick="window.app.retryConnection()" style="background: #25d366; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; margin-top: 15px;">
+                    🔄 Try Again
+                </button>
+            </div>
+        `;
+    }
+
+    async retryConnection() {
+        console.log('Retrying connection...');
+        
+        // Clear any existing polling
+        if (this.currentPollInterval) {
+            clearInterval(this.currentPollInterval);
+            this.currentPollInterval = null;
+        }
+        
+        // Show loading in modal
+        const qrContainer = document.getElementById('qrCode');
+        qrContainer.innerHTML = `
+            <div style="text-align: center; padding: 40px;">
+                <div style="display: inline-block; width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #25d366; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px;"></div>
+                <p><strong>Restarting connection...</strong></p>
+                <p><small>This may take a moment</small></p>
+            </div>
+        `;
+        
+        try {
+            // Force reconnect on server
+            const response = await fetch('/reconnect', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            const data = await response.json();
+            console.log('Reconnect response:', data);
+            
+            if (data.success) {
+                // Wait a bit then start checking for QR
+                setTimeout(() => {
+                    this.checkConnection();
+                }, 2000);
+            } else {
+                this.showQRCodeError();
+            }
+        } catch (error) {
+            console.error('Retry connection error:', error);
+            this.showQRCodeError();
+        }
     }
 
     async logoutWhatsApp() {

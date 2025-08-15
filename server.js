@@ -142,6 +142,42 @@ app.post('/send', upload.single('image'), async (req, res) => {
     }
 });
 
+// Force reconnect endpoint (for when QR gets stuck)
+app.post('/reconnect', async (req, res) => {
+    try {
+        console.log('🔄 Force reconnecting...');
+        
+        // Close existing connection if any
+        if (sock) {
+            try {
+                await sock.end();
+            } catch (e) {
+                console.log('Error closing existing connection:', e.message);
+            }
+            sock = null;
+        }
+        
+        // Reset connection state
+        connectionState = {
+            connected: false,
+            qrCode: null,
+            phone: null
+        };
+        
+        console.log('✅ Starting fresh connection...');
+        res.json({ success: true, message: "Reconnection initiated" });
+        
+        // Start new connection
+        setTimeout(() => {
+            startSock();
+        }, 1000);
+        
+    } catch (error) {
+        console.error('❌ Reconnect error:', error);
+        res.status(500).json({ success: false, message: "Reconnect failed" });
+    }
+});
+
 // Logout endpoint
 app.post('/logout', async (req, res) => {
     try {
