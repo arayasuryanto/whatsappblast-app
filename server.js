@@ -142,6 +142,40 @@ app.post('/send', upload.single('image'), async (req, res) => {
     }
 });
 
+// Logout endpoint
+app.post('/logout', async (req, res) => {
+    try {
+        if (!sock) {
+            return res.json({ success: false, message: "No active connection" });
+        }
+
+        console.log('🚪 Logging out from WhatsApp...');
+        
+        // Close the connection
+        await sock.logout();
+        sock = null;
+        
+        // Update connection state
+        connectionState = {
+            connected: false,
+            qrCode: null,
+            phone: null
+        };
+        
+        console.log('✅ Successfully logged out from WhatsApp');
+        res.json({ success: true, message: "Logged out successfully" });
+        
+        // Restart socket for new connection
+        setTimeout(() => {
+            startSock();
+        }, 2000);
+        
+    } catch (error) {
+        console.error('❌ Logout error:', error);
+        res.status(500).json({ success: false, message: "Logout failed" });
+    }
+});
+
 app.listen(3000, () => {
     console.log("✅ Server berjalan di http://localhost:3000");
     startSock();

@@ -69,6 +69,45 @@ class WhatsAppBlastApp {
             document.getElementById('campaignDetailsModal').classList.remove('active');
         });
 
+        // Header connection status click handler
+        const connectionStatus = document.getElementById('connectionStatus');
+        const logoutDropdown = document.getElementById('logoutDropdown');
+        let dropdownVisible = false;
+        
+        if (connectionStatus) {
+            connectionStatus.addEventListener('click', (e) => {
+                e.stopPropagation();
+                
+                if (this.isConnected) {
+                    // Toggle logout dropdown
+                    dropdownVisible = !dropdownVisible;
+                    if (logoutDropdown) {
+                        logoutDropdown.style.display = dropdownVisible ? 'block' : 'none';
+                    }
+                } else {
+                    // Show QR code if not connected
+                    this.checkConnection();
+                }
+            });
+        }
+
+        // Logout button handler
+        const logoutBtn = document.getElementById('logoutBtn');
+        if (logoutBtn) {
+            logoutBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.logoutWhatsApp();
+            });
+        }
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', () => {
+            if (dropdownVisible && logoutDropdown) {
+                logoutDropdown.style.display = 'none';
+                dropdownVisible = false;
+            }
+        });
+
         // Home page connection status click handler
         const homeConnectionStatus = document.getElementById('homeConnectionStatus');
         if (homeConnectionStatus) {
@@ -157,9 +196,47 @@ class WhatsAppBlastApp {
         }
     }
 
+    async logoutWhatsApp() {
+        if (!confirm('Are you sure you want to logout from WhatsApp? You will need to scan the QR code again to reconnect.')) {
+            return;
+        }
+
+        try {
+            console.log('Logging out from WhatsApp...');
+            const response = await fetch('/logout', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            const data = await response.json();
+            console.log('Logout response:', data);
+            
+            if (data.success) {
+                this.updateConnectionStatus(false);
+                // Hide dropdown
+                const logoutDropdown = document.getElementById('logoutDropdown');
+                if (logoutDropdown) {
+                    logoutDropdown.style.display = 'none';
+                }
+                // Show QR code for reconnection
+                setTimeout(() => {
+                    this.checkConnection();
+                }, 1000);
+            } else {
+                alert('Failed to logout. Please try again.');
+            }
+        } catch (error) {
+            console.error('Logout error:', error);
+            alert('Error during logout. Please try again.');
+        }
+    }
+
     updateConnectionStatus(connected, phone = null) {
         const statusElement = document.getElementById('connectionStatus');
         const homeStatusElement = document.getElementById('homeConnectionStatus');
+        const logoutDropdown = document.getElementById('logoutDropdown');
         
         this.isConnected = connected;
         
@@ -171,9 +248,15 @@ class WhatsAppBlastApp {
             if (connected) {
                 dot.className = 'status-dot connected';
                 text.textContent = phone ? `Connected as ${phone}` : 'Connected';
+                statusElement.classList.add('connected');
             } else {
                 dot.className = 'status-dot disconnected';
                 text.textContent = 'Not Connected';
+                statusElement.classList.remove('connected');
+                // Hide logout dropdown when not connected
+                if (logoutDropdown) {
+                    logoutDropdown.style.display = 'none';
+                }
             }
         }
         
