@@ -773,7 +773,12 @@ class WhatsAppBlastApp {
                 .replace(/\n/g, '<br>');
         }
         
-        return formatted;\n    }\n\n    getRandomDelay(min = 10000, max = 60000) {\n        // Generate random delay for anti-ban (10-60 seconds by default)\n        return Math.floor(Math.random() * (max - min + 1)) + min;
+        return formatted;
+    }
+
+    getRandomDelay(min = 10000, max = 60000) {
+        // Generate random delay for anti-ban (10-60 seconds by default)
+        return Math.floor(Math.random() * (max - min + 1)) + min;
     }
 
     formatWhatsAppTextForSending(text) {

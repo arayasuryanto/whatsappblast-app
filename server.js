@@ -28,7 +28,11 @@ async function startSock() {
     const { state, saveCreds } = await useMultiFileAuthState('auth_info');
     sock = makeWASocket({
         auth: state,
-        browser: ["Windows", "Chrome", "112.0.0.0"],\n        connectTimeoutMs: 60000,\n        defaultQueryTimeoutMs: 0,\n        keepAliveIntervalMs: 10000,\n        printQRInTerminal: false
+        browser: ["Windows", "Chrome", "112.0.0.0"],
+        connectTimeoutMs: 60000,
+        defaultQueryTimeoutMs: 0,
+        keepAliveIntervalMs: 10000,
+        printQRInTerminal: false
     });
 
     sock.ev.on('connection.update', (update) => {
@@ -174,7 +178,13 @@ app.post('/send', upload.single('image'), async (req, res) => {
         
         // Add subtle variations if human behavior is enabled
         if (useHumanBehavior) {
-            personalizedMessage = addMessageVariation(personalizedMessage);\n            \n            // Validate sending rate to prevent too frequent sends\n            const additionalWait = validateSendingRate(lastMessageSendTime);\n            if (additionalWait > 0) {\n                await new Promise(resolve => setTimeout(resolve, additionalWait));\n            }
+            personalizedMessage = addMessageVariation(personalizedMessage);
+            
+            // Validate sending rate to prevent too frequent sends
+            const additionalWait = validateSendingRate(lastMessageSendTime);
+            if (additionalWait > 0) {
+                await new Promise(resolve => setTimeout(resolve, additionalWait));
+            }
             
             // Simulate typing for 2-5 seconds
             const typingDuration = Math.floor(Math.random() * 3000) + 2000;
@@ -201,7 +211,10 @@ app.post('/send', upload.single('image'), async (req, res) => {
         }
         
         await sock.sendMessage(target + '@s.whatsapp.net', messageContent);
-        // Update last send time for rate limiting\n        lastMessageSendTime = Date.now();\n        \n        console.log(`✅ Pesan terkirim ke ${target}`);
+        // Update last send time for rate limiting
+        lastMessageSendTime = Date.now();
+        
+        console.log(`✅ Pesan terkirim ke ${target}`);
         res.json({ status: true, message: "Pesan terkirim" });
     } catch (e) {
         console.error(`❌ Gagal kirim ke ${target}`, e);
