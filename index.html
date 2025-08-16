@@ -230,10 +230,10 @@
                                 <button type="button" class="format-btn" data-format="italic" title="Italic">_I_</button>
                                 <button type="button" class="format-btn" data-format="strikethrough" title="Strikethrough">~~S~~</button>
                                 <button type="button" class="format-btn" data-format="monospace" title="Monospace">```M```</button>
-                                <button type="button" class="format-btn" data-format="quote" title="Quote">></button>
+                                <button type="button" class="format-btn" data-format="quote" title="Quote">></button>\n                                <button type="button" class="format-btn" data-format="name" title="Insert Name Placeholder" style="background: #25d366; color: white;">👤 {{nama}}</button>
                             </div>
-                            <textarea id="messageText" placeholder="Type your WhatsApp message here..."></textarea>
-                            <small>Use {{nama}} to personalize with contact names. Formatting: **bold** _italic_ ~~strikethrough~~ ```monospace```</small>
+                            <textarea id="messageText" placeholder="Hi {{nama}}, how are you today?\n\nThis is a personalized message just for you!"></textarea>
+                            <div class="personalization-help">\n                                <strong>💡 Name Personalization:</strong> Use {{nama}} anywhere in your message to automatically replace it with each contact's name.\n                                <br><small><strong>Example:</strong> "Hi {{nama}}" becomes "Hi John", "Hi Sarah", etc.</small>\n                            </div>\n                            <small>Formatting: **bold** _italic_ ~~strikethrough~~ ```monospace```</small>
                         </div>
                         <div class="form-group">
                             <label for="messageImage">Image (Optional)</label>

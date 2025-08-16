@@ -1356,3 +1356,16 @@ h2 {
         gap: 15px;
     }
 }
+
+.personalization-help {
+    background: #e8f5e8;
+    border: 1px solid #25d366;
+    border-radius: 6px;
+    padding: 12px;
+    margin: 8px 0;
+    font-size: 14px;
+}
+
+.personalization-help strong {
+    color: #1b5e20;
+}

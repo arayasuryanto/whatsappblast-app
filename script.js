@@ -755,7 +755,7 @@ class WhatsAppBlastApp {
 
     formatWhatsAppText(text, forPreview = true) {
         // Replace {{nama}} placeholder first
-        let formatted = text.replace(/\{\{nama\}\}/g, 'John Doe');
+        let formatted = text.replace(/\{\{nama\}\}/g, '<span style=\"background: #fffacd; padding: 2px 4px; border-radius: 3px; font-weight: bold;\">John Doe</span>');
         
         if (forPreview) {
             // HTML formatting for preview
@@ -815,7 +815,7 @@ class WhatsAppBlastApp {
                 break;
             case 'quote':
                 beforeText = '> ';
-                afterText = '';
+                afterText = '';\n                break;\n            case 'name':\n                beforeText = '{{nama}}';\n                afterText = '';
                 break;
         }
         
@@ -852,7 +852,7 @@ class WhatsAppBlastApp {
             const formattedMessage = this.formatWhatsAppText(messageText);
             previewText.innerHTML = formattedMessage;
         } else {
-            previewText.innerHTML = 'Your message will appear here...<br><br><small>Formatting tips:<br>**bold** or *bold*<br>_italic_<br>~strikethrough~<br>```monospace```</small>';
+            previewText.innerHTML = 'Your message will appear here...<br><br><small>💡 Use {{nama}} for personalization<br>Formatting: **bold** _italic_ ~~strikethrough~~ ```monospace```</small>';
         }
         
         // Enable next button if message is not empty
@@ -1305,7 +1305,7 @@ class WhatsAppBlastApp {
         document.getElementById('projectName').value = '';
         document.getElementById('messageText').value = '';
         document.getElementById('messageImage').value = '';
-        document.getElementById('previewText').innerHTML = 'Your message will appear here...<br><br><small>Formatting tips:<br>**bold** or *bold*<br>_italic_<br>~strikethrough~<br>```monospace```</small>';
+        document.getElementById('previewText').innerHTML = 'Your message will appear here...<br><br><small>💡 Use {{nama}} for personalization<br>Formatting: **bold** _italic_ ~~strikethrough~~ ```monospace```</small>';
         document.getElementById('previewImage').style.display = 'none';
         
         // Hide contact list
