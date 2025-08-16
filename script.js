@@ -773,7 +773,7 @@ class WhatsAppBlastApp {
                 .replace(/\n/g, '<br>');
         }
         
-        return formatted;
+        return formatted;\n    }\n\n    getRandomDelay(min = 10000, max = 60000) {\n        // Generate random delay for anti-ban (10-60 seconds by default)\n        return Math.floor(Math.random() * (max - min + 1)) + min;
     }
 
     formatWhatsAppTextForSending(text) {
@@ -980,8 +980,8 @@ class WhatsAppBlastApp {
             statusCell.className = 'status-pending';
             
             try {
-                // Replace nama placeholder and keep WhatsApp formatting
-                const personalizedMessage = this.formatWhatsAppTextForSending(this.messageContent.replace(/\{\{nama\}\}/g, contact.name));
+                // Use original message template with contact name for personalization
+                const messageTemplate = this.messageContent;
                 
                 let response;
                 
@@ -989,7 +989,9 @@ class WhatsAppBlastApp {
                 if (this.messageImage) {
                     const formData = new FormData();
                     formData.append('nomor', contact.phone);
-                    formData.append('pesan', personalizedMessage);
+                    formData.append('pesan', messageTemplate);
+                    formData.append('nama', contact.name);
+                    formData.append('useHumanBehavior', 'true');
                     formData.append('image', this.messageImage);
                     
                     response = await fetch('/send', {
@@ -1004,7 +1006,9 @@ class WhatsAppBlastApp {
                         },
                         body: JSON.stringify({
                             nomor: contact.phone,
-                            pesan: personalizedMessage
+                            pesan: messageTemplate,
+                            nama: contact.name,
+                            useHumanBehavior: true
                         })
                     });
                 }
@@ -1045,9 +1049,20 @@ class WhatsAppBlastApp {
             progressText.textContent = `${sent + failed} / ${total} sent`;
             progressPercent.textContent = Math.round(progress) + '%';
             
-            // Wait 3 seconds between messages (to avoid rate limiting)
+            // Wait random time between messages (10-60 seconds for anti-ban)
             if (i < this.contacts.length - 1) {
-                await new Promise(resolve => setTimeout(resolve, 3000));
+                const delay = this.getRandomDelay(10000, 60000); // 10-60 seconds
+                console.log(`⏰ Waiting ${Math.round(delay/1000)} seconds before next message...`);
+                
+                // Update progress text to show waiting time
+                const progressText = document.getElementById('progressText');
+                const originalText = progressText.textContent;
+                progressText.textContent = `${originalText} - Waiting ${Math.round(delay/1000)}s...`;
+                
+                await new Promise(resolve => setTimeout(resolve, delay));
+                
+                // Restore original progress text
+                progressText.textContent = originalText;
             }
         }
         

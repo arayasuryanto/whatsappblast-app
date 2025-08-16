@@ -28,7 +28,7 @@ async function startSock() {
     const { state, saveCreds } = await useMultiFileAuthState('auth_info');
     sock = makeWASocket({
         auth: state,
-        browser: ["Windows", "Chrome", "10"]
+        browser: ["Windows", "Chrome", "112.0.0.0"],\n        connectTimeoutMs: 60000,\n        defaultQueryTimeoutMs: 0,\n        keepAliveIntervalMs: 10000,\n        printQRInTerminal: false
     });
 
     sock.ev.on('connection.update', (update) => {
@@ -87,9 +87,65 @@ app.get('/status', async (req, res) => {
     });
 });
 
+// Human-like typing simulation
+async function simulateTyping(jid, duration = 2000) {
+    try {
+        await sock.sendPresenceUpdate('composing', jid);
+        await new Promise(resolve => setTimeout(resolve, duration));
+        await sock.sendPresenceUpdate('paused', jid);
+    } catch (error) {
+        console.log('Typing simulation error:', error.message);
+    }
+}
+
+// Generate random delay for human-like behavior
+function getRandomDelay(min = 10000, max = 60000) {
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+// Add subtle message variations to avoid pattern detection
+function addMessageVariation(message) {
+    const variations = [
+        '', // No change (50% chance)
+        '', 
+        '', 
+        '', 
+        '\n', // Add line break at end
+        ' ', // Add space at end  
+        '😊', // Add simple emoji
+        '🙏', // Prayer emoji
+        '✨', // Sparkle emoji
+        '\n\nSalam,', // Add closing
+        '\n\nTerima kasih,', // Thank you closing
+        '\n\nSemoga bermanfaat!', // Hope it's useful
+        '\n\n--', // Simple signature
+    ];
+    
+    const randomVariation = variations[Math.floor(Math.random() * variations.length)];
+    return message + randomVariation;
+}
+
+// Enhanced anti-ban safeguards
+function validateSendingRate(lastSendTime) {
+    const now = Date.now();
+    const timeSinceLastSend = now - (lastSendTime || 0);
+    const minimumInterval = 8000; // Minimum 8 seconds between sends
+    
+    if (timeSinceLastSend < minimumInterval) {
+        const waitTime = minimumInterval - timeSinceLastSend;
+        console.log(`⚠️ Rate limiting: waiting additional ${waitTime}ms`);
+        return waitTime;
+    }
+    
+    return 0;
+}
+
+// Track last send time for rate limiting
+let lastMessageSendTime = 0;
+
 // Endpoint kirim pesan
 app.post('/send', upload.single('image'), async (req, res) => {
-    const { nomor, pesan } = req.body;
+    const { nomor, pesan, nama, useHumanBehavior = true } = req.body;
     const imageFile = req.file;
     
     if (!nomor || !pesan) {
@@ -108,6 +164,23 @@ app.post('/send', upload.single('image'), async (req, res) => {
     }
 
     try {
+        const jid = target + '@s.whatsapp.net';
+        
+        // Personalize message with contact name
+        let personalizedMessage = pesan;
+        if (nama) {
+            personalizedMessage = pesan.replace(/\{\{nama\}\}/g, nama);
+        }
+        
+        // Add subtle variations if human behavior is enabled
+        if (useHumanBehavior) {
+            personalizedMessage = addMessageVariation(personalizedMessage);\n            \n            // Validate sending rate to prevent too frequent sends\n            const additionalWait = validateSendingRate(lastMessageSendTime);\n            if (additionalWait > 0) {\n                await new Promise(resolve => setTimeout(resolve, additionalWait));\n            }
+            
+            // Simulate typing for 2-5 seconds
+            const typingDuration = Math.floor(Math.random() * 3000) + 2000;
+            console.log(`⌨️ Simulating typing for ${typingDuration}ms to ${target}`);
+            await simulateTyping(jid, typingDuration);
+        }
         let messageContent;
         
         if (imageFile) {
@@ -117,18 +190,18 @@ app.post('/send', upload.single('image'), async (req, res) => {
             
             messageContent = {
                 image: imageBuffer,
-                caption: pesan
+                caption: personalizedMessage
             };
             
             // Clean up the uploaded file after reading
             fs.unlinkSync(imagePath);
         } else {
             // Send text-only message
-            messageContent = { text: pesan };
+            messageContent = { text: personalizedMessage };
         }
         
         await sock.sendMessage(target + '@s.whatsapp.net', messageContent);
-        console.log(`✅ Pesan terkirim ke ${target}`);
+        // Update last send time for rate limiting\n        lastMessageSendTime = Date.now();\n        \n        console.log(`✅ Pesan terkirim ke ${target}`);
         res.json({ status: true, message: "Pesan terkirim" });
     } catch (e) {
         console.error(`❌ Gagal kirim ke ${target}`, e);
