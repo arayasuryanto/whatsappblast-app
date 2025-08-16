@@ -770,7 +770,7 @@ class WhatsAppBlastApp {
                 // Monospace: ```text```
                 .replace(/```(.*?)```/g, '<code>$1</code>')
                 // Line breaks
-                .replace(/\n/g, '<br>');
+                // Convert line breaks to HTML for proper display\n                .replace(/\\n/g, '<br>');
         }
         
         return formatted;
