@@ -815,7 +815,11 @@ class WhatsAppBlastApp {
                 break;
             case 'quote':
                 beforeText = '> ';
-                afterText = '';\n                break;\n            case 'name':\n                beforeText = '{{nama}}';\n                afterText = '';
+                afterText = '';
+                break;
+            case 'name':
+                beforeText = '{{nama}}';
+                afterText = '';
                 break;
         }
         
