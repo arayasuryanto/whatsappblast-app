@@ -8,6 +8,8 @@ class WhatsAppBlastApp {
         this.sendingResults = [];
         this.broadcastHistory = [];
         this.scheduledCampaigns = [];
+        this.isSending = false;
+        this.stopSending = false;
         
         this.init();
     }
@@ -183,6 +185,11 @@ class WhatsAppBlastApp {
         document.getElementById('retryFailed').addEventListener('click', () => this.retryMessages('failed'));
         document.getElementById('retryAll').addEventListener('click', () => this.retryMessages('all'));
         document.getElementById('newCampaign').addEventListener('click', this.newCampaign.bind(this));
+        
+        // Stop sending button
+        document.getElementById('stopSending').addEventListener('click', () => {
+            this.stopCampaign();
+        });
     }
 
     async checkConnection() {
@@ -1008,8 +1015,26 @@ class WhatsAppBlastApp {
             sendingTableBody.appendChild(tr);
         });
         
+        // Set sending flag
+        this.isSending = true;
+        this.stopSending = false;
+        
+        // Reset stop button
+        const stopBtn = document.getElementById('stopSending');
+        if (stopBtn) {
+            stopBtn.textContent = 'Stop Campaign';
+            stopBtn.disabled = false;
+            stopBtn.style.backgroundColor = '#f44336';
+        }
+        
         // Process each contact
         for (let i = 0; i < this.contacts.length; i++) {
+            // Check if user requested to stop
+            if (this.stopSending) {
+                console.log('Sending stopped by user');
+                break;
+            }
+            
             const contact = this.contacts[i];
             const row = document.getElementById(`contact-${i}`);
             const statusCell = row.querySelector('td:last-child');
@@ -1071,49 +1096,99 @@ class WhatsAppBlastApp {
                     });
                 }
             } catch (error) {
-                failed++;
-                statusCell.textContent = 'Failed';
-                statusCell.className = 'status-failed';
-                this.sendingResults.push({
-                    contact: contact,
-                    status: 'failed',
-                    index: i
-                });
+                if (!this.stopSending) {
+                    failed++;
+                    statusCell.textContent = 'Failed';
+                    statusCell.className = 'status-failed';
+                    this.sendingResults.push({
+                        contact: contact,
+                        status: 'failed',
+                        index: i
+                    });
+                } else {
+                    statusCell.textContent = 'Stopped';
+                    statusCell.className = 'status-stopped';
+                    this.sendingResults.push({
+                        contact: contact,
+                        status: 'stopped',
+                        index: i
+                    });
+                }
             }
             
             // Update progress
-            const progress = ((sent + failed) / total) * 100;
+            const processed = sent + failed;
+            const progress = (processed / total) * 100;
             progressFill.style.width = progress + '%';
-            progressText.textContent = `${sent + failed} / ${total} sent`;
+            progressText.textContent = this.stopSending ? `Stopped: ${sent} sent, ${failed} failed` : `${processed} / ${total} sent`;
             progressPercent.textContent = Math.round(progress) + '%';
             
             // Wait random time between messages (10-60 seconds for anti-ban)
-            if (i < this.contacts.length - 1) {
+            if (i < this.contacts.length - 1 && !this.stopSending) {
                 const delay = this.getRandomDelay(10000, 60000); // 10-60 seconds
                 console.log(`⏰ Waiting ${Math.round(delay/1000)} seconds before next message...`);
                 
                 // Update progress text to show waiting time
-                const progressText = document.getElementById('progressText');
-                const originalText = progressText.textContent;
-                progressText.textContent = `${originalText} - Waiting ${Math.round(delay/1000)}s...`;
+                const progressTextEl = document.getElementById('progressText');
+                const originalText = progressTextEl.textContent;
+                progressTextEl.textContent = `${originalText} - Waiting ${Math.round(delay/1000)}s...`;
                 
-                await new Promise(resolve => setTimeout(resolve, delay));
+                // Wait with ability to be interrupted
+                let waitTime = 0;
+                while (waitTime < delay && !this.stopSending) {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    waitTime += 1000;
+                }
                 
                 // Restore original progress text
-                progressText.textContent = originalText;
+                if (!this.stopSending) {
+                    progressTextEl.textContent = originalText;
+                }
             }
         }
         
+        // Handle remaining contacts if stopped
+        if (this.stopSending) {
+            for (let i = sent + failed; i < this.contacts.length; i++) {
+                const contact = this.contacts[i];
+                const row = document.getElementById(`contact-${i}`);
+                const statusCell = row.querySelector('td:last-child');
+                
+                statusCell.textContent = 'Stopped';
+                statusCell.className = 'status-stopped';
+                
+                this.sendingResults.push({
+                    contact: contact,
+                    status: 'stopped',
+                    index: i
+                });
+            }
+        }
+        
+        // Reset sending flags
+        this.isSending = false;
+        this.stopSending = false;
+        
         // Show summary after completion
         setTimeout(() => {
-            this.showSummary(sent, failed, total);
+            const stopped = this.sendingResults.filter(r => r.status === 'stopped').length;
+            this.showSummary(sent, failed, total, stopped);
         }, 1000);
     }
 
-    showSummary(sent, failed, total) {
+    showSummary(sent, failed, total, stopped = 0) {
         document.getElementById('sentCount').textContent = sent;
         document.getElementById('failedCount').textContent = failed;
         document.getElementById('totalSent').textContent = total;
+        
+        // Add stopped count if applicable
+        const summaryText = document.querySelector('#step5 .summary');
+        if (stopped > 0 && summaryText) {
+            const stoppedInfo = document.createElement('p');
+            stoppedInfo.innerHTML = `<strong>${stopped}</strong> messages were stopped`;
+            stoppedInfo.style.color = '#ff9800';
+            summaryText.appendChild(stoppedInfo);
+        }
         
         // Populate detailed results table
         const resultsTableBody = document.querySelector('#resultsTable tbody');
@@ -1333,6 +1408,8 @@ class WhatsAppBlastApp {
         this.messageImage = null;
         this.currentStep = 1;
         this.sendingResults = [];
+        this.isSending = false;
+        this.stopSending = false;
         
         // Clear forms
         document.getElementById('projectName').value = '';
@@ -1351,6 +1428,23 @@ class WhatsAppBlastApp {
         // Show campaign page
         this.showCampaignPage();
         this.goToStep(1);
+    }
+    
+    stopCampaign() {
+        if (this.isSending) {
+            if (confirm('Are you sure you want to stop the campaign? Messages that have not been sent will be marked as stopped.')) {
+                console.log('User requested to stop campaign');
+                this.stopSending = true;
+                
+                // Update stop button
+                const stopBtn = document.getElementById('stopSending');
+                if (stopBtn) {
+                    stopBtn.textContent = 'Stopping...';
+                    stopBtn.disabled = true;
+                    stopBtn.style.backgroundColor = '#999';
+                }
+            }
+        }
     }
 
     showHomePage() {
