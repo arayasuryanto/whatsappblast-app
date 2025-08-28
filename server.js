@@ -70,14 +70,31 @@ async function startSock() {
             connectionState.qrCode = null;
             connectionState.phone = null;
             
-            const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-            console.log('Should reconnect:', shouldReconnect, 'Reason:', lastDisconnect?.error?.output?.statusCode);
+            const statusCode = lastDisconnect?.error?.output?.statusCode;
+            const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+            console.log('Should reconnect:', shouldReconnect, 'Reason:', statusCode);
             
-            if (shouldReconnect) {
+            // Handle auth failure (401) - clear session and restart
+            if (statusCode === 401) {
+                console.log('⚠️ Authentication failed, clearing session...');
+                const authPath = path.join(__dirname, 'auth_info');
+                if (fs.existsSync(authPath)) {
+                    fs.rmSync(authPath, { recursive: true, force: true });
+                    console.log('🗑️ Auth session cleared');
+                }
+            }
+            
+            if (shouldReconnect && statusCode !== 401) {
                 console.log('🔄 Auto-reconnecting in 5 seconds...');
                 setTimeout(() => {
                     startSock();
                 }, 5000);
+            } else if (statusCode === 401) {
+                // For auth errors, restart with fresh session
+                console.log('🔄 Starting fresh connection after auth failure...');
+                setTimeout(() => {
+                    startSock();
+                }, 3000);
             }
         }
     });
@@ -267,6 +284,13 @@ app.post('/reconnect', async (req, res) => {
             sock = null;
         }
         
+        // Clear auth info to force fresh QR code
+        const authPath = path.join(__dirname, 'auth_info');
+        if (fs.existsSync(authPath)) {
+            console.log('🗑️ Clearing old auth session for fresh start...');
+            fs.rmSync(authPath, { recursive: true, force: true });
+        }
+        
         // Reset connection state
         connectionState = {
             connected: false,
@@ -280,7 +304,7 @@ app.post('/reconnect', async (req, res) => {
         // Start new connection
         setTimeout(() => {
             startSock();
-        }, 1000);
+        }, 2000);
         
     } catch (error) {
         console.error('❌ Reconnect error:', error);
@@ -291,15 +315,24 @@ app.post('/reconnect', async (req, res) => {
 // Logout endpoint
 app.post('/logout', async (req, res) => {
     try {
-        if (!sock) {
-            return res.json({ success: false, message: "No active connection" });
-        }
-
         console.log('🚪 Logging out from WhatsApp...');
         
-        // Close the connection
-        await sock.logout();
-        sock = null;
+        // Close the connection if exists
+        if (sock) {
+            try {
+                await sock.logout();
+            } catch (e) {
+                console.log('Logout error (continuing anyway):', e.message);
+            }
+            sock = null;
+        }
+        
+        // Clear auth info to force new QR code
+        const authPath = path.join(__dirname, 'auth_info');
+        if (fs.existsSync(authPath)) {
+            console.log('🗑️ Clearing auth session...');
+            fs.rmSync(authPath, { recursive: true, force: true });
+        }
         
         // Update connection state
         connectionState = {
@@ -308,13 +341,14 @@ app.post('/logout', async (req, res) => {
             phone: null
         };
         
-        console.log('✅ Successfully logged out from WhatsApp');
+        console.log('✅ Successfully logged out and cleared session');
         res.json({ success: true, message: "Logged out successfully" });
         
-        // Restart socket for new connection
+        // Restart socket for new connection after a delay
         setTimeout(() => {
+            console.log('🔄 Starting fresh connection...');
             startSock();
-        }, 2000);
+        }, 3000);
         
     } catch (error) {
         console.error('❌ Logout error:', error);

@@ -203,6 +203,17 @@ class WhatsAppBlastApp {
                     // Poll for QR code
                     this.pollForQRCode();
                 }
+            } else {
+                // Connected - hide QR modal and clear polls
+                const qrModal = document.getElementById('qrModal');
+                if (qrModal) {
+                    qrModal.classList.remove('active');
+                }
+                // Clear any existing polls
+                if (this.currentPollInterval) {
+                    clearInterval(this.currentPollInterval);
+                    this.currentPollInterval = null;
+                }
             }
         } catch (error) {
             console.error('Connection check error:', error);
@@ -368,6 +379,12 @@ class WhatsAppBlastApp {
 
         try {
             console.log('Logging out from WhatsApp...');
+            // Clear any existing polls first
+            if (this.currentPollInterval) {
+                clearInterval(this.currentPollInterval);
+                this.currentPollInterval = null;
+            }
+            
             const response = await fetch('/logout', {
                 method: 'POST',
                 headers: {
@@ -385,10 +402,10 @@ class WhatsAppBlastApp {
                 if (logoutDropdown) {
                     logoutDropdown.style.display = 'none';
                 }
-                // Show QR code for reconnection
+                // Wait for server to clear auth and restart
                 setTimeout(() => {
                     this.checkConnection();
-                }, 1000);
+                }, 4000); // Increased to 4 seconds to allow server to fully restart
             } else {
                 alert('Failed to logout. Please try again.');
             }
