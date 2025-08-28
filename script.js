@@ -228,7 +228,7 @@ class WhatsAppBlastApp {
 
     async pollForQRCode() {
         let attempts = 0;
-        const maxAttempts = 150; // 5 minutes (150 * 2 seconds)
+        const maxAttempts = 60; // 2 minutes (60 * 2 seconds)
         
         // Clear any existing polls
         if (this.currentPollInterval) {
@@ -252,12 +252,24 @@ class WhatsAppBlastApp {
                     this.updateConnectionStatus(true, data.phone);
                     document.getElementById('qrModal').classList.remove('active');
                     return;
-                } else if (data.qrImage) {
+                } else if (data.qrImage && !data.connected) {
                     // QR code is ready, show it
                     console.log('QR code received, updating modal');
                     this.showQRCode(data.qrImage);
-                } else if (attempts > 15) {
-                    // After 30 seconds with no QR, show error with retry
+                } else if (!data.qrImage && !data.connected && attempts > 5) {
+                    // Show connecting state if QR was scanned but not yet connected
+                    const qrContainer = document.getElementById('qrCode');
+                    if (!qrContainer.innerHTML.includes('Connecting')) {
+                        qrContainer.innerHTML = `
+                            <div style="text-align: center; padding: 40px;">
+                                <div style="display: inline-block; width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #25d366; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px;"></div>
+                                <p><strong>Connecting to WhatsApp...</strong></p>
+                                <p><small>QR code was scanned, establishing connection...</small></p>
+                            </div>
+                        `;
+                    }
+                } else if (attempts > 25) {
+                    // After 50 seconds with no connection, show error with retry
                     this.showQRCodeError();
                 }
             } catch (error) {

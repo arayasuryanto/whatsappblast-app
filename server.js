@@ -25,20 +25,24 @@ let connectionState = {
 };
 
 async function startSock() {
-    const { state, saveCreds } = await useMultiFileAuthState('auth_info');
-    sock = makeWASocket({
-        auth: state,
-        browser: ["Windows", "Chrome", "112.0.0.0"],
-        connectTimeoutMs: 120000, // Increased to 2 minutes
-        defaultQueryTimeoutMs: 0,
-        keepAliveIntervalMs: 10000,
-        printQRInTerminal: false,
-        qrTimeout: 60000, // QR timeout 60 seconds
-        markOnlineOnConnect: true
-    });
+    try {
+        const { state, saveCreds } = await useMultiFileAuthState('auth_info');
+        sock = makeWASocket({
+            auth: state,
+            browser: ["Windows", "Chrome", "112.0.0.0"],
+            connectTimeoutMs: 120000, // Increased to 2 minutes
+            defaultQueryTimeoutMs: 0,
+            keepAliveIntervalMs: 10000,
+            printQRInTerminal: false,
+            qrTimeout: 60000, // QR timeout 60 seconds
+            markOnlineOnConnect: true,
+            generateHighQualityLinkPreview: true,
+            syncFullHistory: false
+        });
 
     sock.ev.on('connection.update', (update) => {
         const { connection, qr, lastDisconnect } = update;
+        console.log('Connection update:', { connection, qr: !!qr, lastDisconnect: lastDisconnect?.error?.output?.statusCode });
         
         if (qr) {
             console.log("✅ QR Code generated successfully");
@@ -47,8 +51,14 @@ async function startSock() {
             connectionState.connected = false;
         }
         
+        if (connection === 'connecting') {
+            console.log('🔄 WhatsApp connecting...');
+            connectionState.connected = false;
+            connectionState.qrCode = null; // Clear QR when connecting
+        }
+        
         if (connection === 'open') {
-            console.log('✅ WhatsApp Connected');
+            console.log('✅ WhatsApp Connected successfully!');
             connectionState.connected = true;
             connectionState.qrCode = null;
             connectionState.phone = sock.user?.id?.split(':')[0];
@@ -57,16 +67,28 @@ async function startSock() {
         if (connection === 'close') {
             console.log('❌ WhatsApp Disconnected');
             connectionState.connected = false;
+            connectionState.qrCode = null;
             connectionState.phone = null;
+            
             const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
+            console.log('Should reconnect:', shouldReconnect, 'Reason:', lastDisconnect?.error?.output?.statusCode);
+            
             if (shouldReconnect) {
-                console.log('🔄 Reconnecting...');
-                startSock();
+                console.log('🔄 Auto-reconnecting in 5 seconds...');
+                setTimeout(() => {
+                    startSock();
+                }, 5000);
             }
         }
     });
 
-    sock.ev.on('creds.update', saveCreds);
+        sock.ev.on('creds.update', saveCreds);
+    } catch (error) {
+        console.error('❌ Error starting WhatsApp socket:', error);
+        connectionState.connected = false;
+        connectionState.qrCode = null;
+        connectionState.phone = null;
+    }
 }
 
 // Serve the main page
