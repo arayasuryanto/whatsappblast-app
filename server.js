@@ -29,17 +29,19 @@ async function startSock() {
     sock = makeWASocket({
         auth: state,
         browser: ["Windows", "Chrome", "112.0.0.0"],
-        connectTimeoutMs: 60000,
+        connectTimeoutMs: 120000, // Increased to 2 minutes
         defaultQueryTimeoutMs: 0,
         keepAliveIntervalMs: 10000,
-        printQRInTerminal: false
+        printQRInTerminal: false,
+        qrTimeout: 60000, // QR timeout 60 seconds
+        markOnlineOnConnect: true
     });
 
     sock.ev.on('connection.update', (update) => {
         const { connection, qr, lastDisconnect } = update;
         
         if (qr) {
-            console.log("Scan QR berikut untuk login:");
+            console.log("✅ QR Code generated successfully");
             qrcode.generate(qr, { small: true });
             connectionState.qrCode = qr;
             connectionState.connected = false;

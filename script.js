@@ -256,13 +256,13 @@ class WhatsAppBlastApp {
                     // QR code is ready, show it
                     console.log('QR code received, updating modal');
                     this.showQRCode(data.qrImage);
-                } else if (attempts > 5) {
-                    // After 10 seconds with no QR, show error with retry
+                } else if (attempts > 15) {
+                    // After 30 seconds with no QR, show error with retry
                     this.showQRCodeError();
                 }
             } catch (error) {
                 console.error('QR polling error:', error);
-                if (attempts > 3) {
+                if (attempts > 10) {
                     this.showQRCodeError();
                 }
             }
@@ -305,7 +305,7 @@ class WhatsAppBlastApp {
     }
 
     async retryConnection() {
-        console.log('Retrying connection...');
+        console.log('🔄 Retrying connection...');
         
         // Clear any existing polling
         if (this.currentPollInterval) {
@@ -318,8 +318,8 @@ class WhatsAppBlastApp {
         qrContainer.innerHTML = `
             <div style="text-align: center; padding: 40px;">
                 <div style="display: inline-block; width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #25d366; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px;"></div>
-                <p><strong>Restarting connection...</strong></p>
-                <p><small>This may take a moment</small></p>
+                <p><strong>Restarting WhatsApp connection...</strong></p>
+                <p><small>Please wait, this may take up to 30 seconds</small></p>
             </div>
         `;
         
@@ -336,10 +336,10 @@ class WhatsAppBlastApp {
             console.log('Reconnect response:', data);
             
             if (data.success) {
-                // Wait a bit then start checking for QR
+                // Wait longer for server to establish new connection
                 setTimeout(() => {
                     this.checkConnection();
-                }, 2000);
+                }, 3000); // Increased to 3 seconds
             } else {
                 this.showQRCodeError();
             }
