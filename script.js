@@ -190,6 +190,13 @@ class WhatsAppBlastApp {
         document.getElementById('stopSending').addEventListener('click', () => {
             this.stopCampaign();
         });
+        
+        // Delay range inputs
+        document.getElementById('minDelay').addEventListener('input', this.updateDelayPreview.bind(this));
+        document.getElementById('maxDelay').addEventListener('input', this.updateDelayPreview.bind(this));
+        
+        // Initialize delay preview
+        this.updateDelayPreview();
     }
 
     async checkConnection() {
@@ -1123,9 +1130,11 @@ class WhatsAppBlastApp {
             progressText.textContent = this.stopSending ? `Stopped: ${sent} sent, ${failed} failed` : `${processed} / ${total} sent`;
             progressPercent.textContent = Math.round(progress) + '%';
             
-            // Wait random time between messages (10-60 seconds for anti-ban)
+            // Wait random time between messages with custom range
             if (i < this.contacts.length - 1 && !this.stopSending) {
-                const delay = this.getRandomDelay(10000, 60000); // 10-60 seconds
+                const minDelay = parseInt(document.getElementById('minDelay').value) || 10;
+                const maxDelay = parseInt(document.getElementById('maxDelay').value) || 60;
+                const delay = this.getRandomDelay(minDelay * 1000, maxDelay * 1000);
                 console.log(`⏰ Waiting ${Math.round(delay/1000)} seconds before next message...`);
                 
                 // Update progress text to show waiting time
@@ -1444,6 +1453,34 @@ class WhatsAppBlastApp {
                     stopBtn.style.backgroundColor = '#999';
                 }
             }
+        }
+    }
+    
+    updateDelayPreview() {
+        const minDelayInput = document.getElementById('minDelay');
+        const maxDelayInput = document.getElementById('maxDelay');
+        const minDelay = parseInt(minDelayInput.value) || 10;
+        const maxDelay = parseInt(maxDelayInput.value) || 60;
+        
+        // Validate ranges
+        if (minDelay >= maxDelay) {
+            if (event && event.target === minDelayInput) {
+                // If user changed min delay, adjust max delay
+                maxDelayInput.value = minDelay + 10;
+            } else {
+                // If user changed max delay, adjust min delay
+                minDelayInput.value = Math.max(1, maxDelay - 10);
+            }
+        }
+        
+        // Get final values after validation
+        const finalMin = parseInt(minDelayInput.value) || 10;
+        const finalMax = parseInt(maxDelayInput.value) || 60;
+        
+        // Update preview text
+        const delayPreview = document.getElementById('delayPreview');
+        if (delayPreview) {
+            delayPreview.textContent = `${finalMin}-${finalMax}`;
         }
     }
 

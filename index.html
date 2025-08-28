@@ -288,6 +288,24 @@
                         </div>
                     </div>
                     
+                    <div class="delay-settings">
+                        <h4>Sending Delay Settings</h4>
+                        <p class="delay-description">Set random delay between messages to avoid being flagged as spam</p>
+                        <div class="delay-range">
+                            <div class="form-group">
+                                <label for="minDelay">Minimum Delay (seconds)</label>
+                                <input type="number" id="minDelay" value="10" min="1" max="300">
+                            </div>
+                            <div class="form-group">
+                                <label for="maxDelay">Maximum Delay (seconds)</label>
+                                <input type="number" id="maxDelay" value="60" min="1" max="300">
+                            </div>
+                        </div>
+                        <div class="delay-info">
+                            <small>💡 Random delay between <span id="delayPreview">10-60</span> seconds will be applied between each message</small>
+                        </div>
+                    </div>
+                    
                     <div class="send-summary">
                         <h4>Campaign Summary</h4>
                         <div class="summary-item">
