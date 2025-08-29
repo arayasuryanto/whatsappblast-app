@@ -3,7 +3,7 @@
   "name": "whatsapp-blast-app",
   "builds": [
     {
-      "src": "server-minimal.js",
+      "src": "server.js",
       "use": "@vercel/node",
       "config": {
         "maxDuration": 60
@@ -13,7 +13,7 @@
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "/server-minimal.js"
+      "dest": "/server.js"
     }
   ],
   "env": {
