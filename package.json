@@ -32,5 +32,9 @@
     "uuid": "^9.0.1",
     "xlsx": "^0.18.5"
   },
-  "description": ""
+  "description": "",
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  }
 }
