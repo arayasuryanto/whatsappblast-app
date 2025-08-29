@@ -1185,6 +1185,28 @@ class WhatsAppBlastApp {
         // Clear previous results
         this.sendingResults = [];
         
+        // Create campaign data for real-time sync
+        const campaignData = {
+            name: document.getElementById('projectName').value || 'Unnamed Campaign',
+            contacts: this.contacts,
+            message: this.messageContent,
+            image: this.messageImage,
+            status: 'ongoing',
+            progress: 0,
+            results: { sent: 0, failed: 0, total: total }
+        };
+        
+        // Save to real-time database
+        let campaignId = null;
+        if (window.realtimeUI) {
+            campaignId = await window.realtimeUI.saveCampaign(campaignData);
+            await window.realtimeUI.logActivity('campaign_started', {
+                campaignId,
+                campaignName: campaignData.name,
+                contactCount: total
+            });
+        }
+        
         progressText.textContent = `${sent} / ${total} sent`;
         progressPercent.textContent = '0%';
         
@@ -1320,6 +1342,14 @@ class WhatsAppBlastApp {
             progressText.textContent = this.stopSending ? `Stopped: ${sent} sent, ${failed} failed` : `${processed} / ${total} sent`;
             progressPercent.textContent = Math.round(progress) + '%';
             
+            // Update real-time progress
+            if (window.realtimeUI && campaignId) {
+                await window.realtimeUI.updateCampaignStatus(campaignId, 'ongoing', {
+                    progress: Math.round(progress),
+                    results: { sent, failed, total }
+                });
+            }
+            
             // Wait random time between messages with custom range
             if (i < this.contacts.length - 1 && !this.stopSending) {
                 const minDelay = parseInt(document.getElementById('minDelay').value) || 10;
@@ -1386,6 +1416,24 @@ class WhatsAppBlastApp {
         
         // Update visual indicators
         this.updateWakeLockStatus(false);
+        
+        // Update real-time database with completion
+        if (window.realtimeUI && campaignId) {
+            const finalStatus = this.stopSending ? 'stopped' : 'completed';
+            await window.realtimeUI.updateCampaignStatus(campaignId, finalStatus, {
+                progress: 100,
+                results: { sent, failed, total },
+                completedAt: Date.now()
+            });
+            
+            await window.realtimeUI.logActivity(finalStatus === 'stopped' ? 'campaign_stopped' : 'campaign_completed', {
+                campaignId,
+                campaignName: campaignData.name,
+                sent,
+                failed,
+                total
+            });
+        }
         
         // Show notification if page is hidden
         if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
