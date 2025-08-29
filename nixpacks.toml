@@ -1,20 +1,19 @@
-# nixpacks.toml
+# nixpacks.toml - Ultra minimal for server-test.js
 [phases.setup]
-nixPkgs = ["nodejs_20", "python3", "gcc"]
+nixPkgs = ["nodejs_20"]
 
 [phases.install]
 cmds = [
-  "npm ci --omit=dev --maxsockets=1",
+  "echo 'Skipping npm install - using Node.js built-in modules only'",
   "mkdir -p uploads auth_info",
   "chmod -R 755 uploads auth_info"
 ]
 
 [phases.build]
-cmds = ["echo 'Build complete - WhatsApp Blast ready'"]
+cmds = ["echo 'Build complete - Ultra minimal server ready'"]
 
 [variables]
 NODE_ENV = "production"
-NODE_OPTIONS = "--max_old_space_size=512"
 
 [start]
-cmd = "npm start"
+cmd = "node server-test.js"
