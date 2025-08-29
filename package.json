@@ -4,7 +4,8 @@
   "main": "server.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node server-minimal.js",
+    "start": "node server-test.js",
+    "start:minimal": "node server-minimal.js",
     "start:full": "node server.js",
     "start:dev": "node server.js",
     "build": "echo 'Static demo files ready for deployment' && ls frontend/",
@@ -19,15 +20,14 @@
   ],
   "author": "Araya Suryanto",
   "license": "MIT",
-  "dependencies": {
+  "dependencies": {},
+  "optionalDependencies": {
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "firebase": "^10.14.1",
     "firebase-admin": "^11.11.1",
     "socket.io": "^4.8.1",
-    "uuid": "^9.0.1"
-  },
-  "optionalDependencies": {
+    "uuid": "^9.0.1",
     "@whiskeysockets/baileys": "^6.7.18",
     "axios": "^1.11.0",
     "body-parser": "^2.2.0",
