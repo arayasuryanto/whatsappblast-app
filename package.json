@@ -4,7 +4,9 @@
   "main": "server.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node server.js",
+    "start": "node server-minimal.js",
+    "start:full": "node server.js",
+    "start:dev": "node server.js",
     "build": "echo 'Static demo files ready for deployment' && ls frontend/",
     "build:netlify": "cd frontend && echo 'Netlify demo build complete'",
     "dev": "node server.js"
@@ -18,18 +20,20 @@
   "author": "Araya Suryanto",
   "license": "MIT",
   "dependencies": {
-    "@whiskeysockets/baileys": "^6.7.18",
-    "axios": "^1.11.0",
-    "body-parser": "^2.2.0",
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "firebase": "^10.14.1",
     "firebase-admin": "^11.11.1",
+    "socket.io": "^4.8.1",
+    "uuid": "^9.0.1"
+  },
+  "optionalDependencies": {
+    "@whiskeysockets/baileys": "^6.7.18",
+    "axios": "^1.11.0",
+    "body-parser": "^2.2.0",
     "multer": "^2.0.2",
     "qrcode": "^1.5.4",
     "qrcode-terminal": "^0.12.0",
-    "socket.io": "^4.8.1",
-    "uuid": "^9.0.1",
     "xlsx": "^0.18.5"
   },
   "description": "",
