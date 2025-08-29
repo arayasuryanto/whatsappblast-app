@@ -6,10 +6,30 @@ const QRCode = require('qrcode');
 const path = require('path');
 const multer = require('multer');
 const fs = require('fs');
+const cors = require('cors');
 
 const app = express();
-app.use(bodyParser.json());
+
+// Enable CORS for all origins (for Railway deployment)
+app.use(cors({
+    origin: true,
+    credentials: true
+}));
+
+// Middleware
+app.use(bodyParser.json({ limit: '10mb' }));
+app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
 app.use(express.static(path.join(__dirname)));
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+    res.json({
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+        whatsapp: connectionState.connected ? 'connected' : 'disconnected'
+    });
+});
 
 // Configure multer for file uploads
 const upload = multer({ 
@@ -356,8 +376,60 @@ app.post('/logout', async (req, res) => {
     }
 });
 
-const PORT = process.env.PORT || 1;
-app.listen(PORT, () => {
-    console.log(`✅ Server berjalan di http://localhost:${PORT}`);
-    startSock();
+const PORT = process.env.PORT || 3000;
+
+// Add error handling for server startup
+app.listen(PORT, '0.0.0.0', (error) => {
+    if (error) {
+        console.error('❌ Error starting server:', error);
+        process.exit(1);
+    }
+    
+    console.log(`✅ Server running on port ${PORT}`);
+    console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`📱 WhatsApp connection initializing...`);
+    
+    // Start WhatsApp connection
+    try {
+        startSock();
+    } catch (error) {
+        console.error('❌ Error initializing WhatsApp:', error);
+        // Don't exit - server can still serve the UI
+    }
+});
+
+// Handle graceful shutdown
+process.on('SIGTERM', () => {
+    console.log('📴 SIGTERM received, shutting down gracefully...');
+    if (sock) {
+        try {
+            sock.end();
+        } catch (error) {
+            console.log('Error closing WhatsApp connection:', error.message);
+        }
+    }
+    process.exit(0);
+});
+
+process.on('SIGINT', () => {
+    console.log('📴 SIGINT received, shutting down gracefully...');
+    if (sock) {
+        try {
+            sock.end();
+        } catch (error) {
+            console.log('Error closing WhatsApp connection:', error.message);
+        }
+    }
+    process.exit(0);
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+    console.error('❌ Uncaught Exception:', error);
+    // Don't exit immediately, log the error
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+    // Don't exit immediately, log the error
 });

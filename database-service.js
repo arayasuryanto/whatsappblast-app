@@ -18,13 +18,13 @@ class DatabaseService {
 
             // Firebase config (replace with your config)
             const firebaseConfig = {
-                apiKey: "demo-key",
+                apiKey: "AIzaSyBn-EvBHSKUkFBdPOXUZJDmvDPgnD87lYc",
                 authDomain: "whatsapp-blast-demo.firebaseapp.com",
-                databaseURL: "https://whatsapp-blast-demo-default-rtdb.firebaseio.com/",
-                projectId: "whatsapp-blast-demo",
-                storageBucket: "whatsapp-blast-demo.appspot.com",
-                messagingSenderId: "123456789",
-                appId: "demo-app-id"
+                databaseURL: "https://whatsapp-blast-team-default-rtdb.asia-southeast1.firebasedatabase.app",
+                projectId: "whatsapp-blast-team",
+                storageBucket: "whatsapp-blast-team.firebasestorage.app",
+                messagingSenderId: "892116353481",
+                appId: "1:892116353481:web:024363c3d5b79d854d6818"
             };
 
             const app = initializeApp(firebaseConfig);
@@ -50,30 +50,40 @@ class DatabaseService {
 
     async setupAuth() {
         return new Promise((resolve) => {
-            const { onAuthStateChanged, signInAnonymously } = this.firebase;
-            
-            onAuthStateChanged(this.auth, async (user) => {
-                if (user) {
-                    this.currentUser = {
-                        uid: user.uid,
-                        name: localStorage.getItem('userName') || 'Anonymous User',
-                        email: localStorage.getItem('userEmail') || 'anonymous@example.com',
-                        role: localStorage.getItem('userRole') || 'sales',
-                        isOnline: true
-                    };
-                    
-                    // Set team ID (for demo, use 'default-team')
-                    this.teamId = localStorage.getItem('teamId') || 'default-team';
-                    
-                    // Update user presence
-                    await this.updateUserPresence(true);
-                    
-                    resolve();
-                } else {
-                    // Sign in anonymously
-                    await signInAnonymously(this.auth);
-                }
-            });
+            try {
+                const { onAuthStateChanged, signInAnonymously } = this.firebase;
+                
+                onAuthStateChanged(this.auth, async (user) => {
+                    try {
+                        if (user) {
+                            this.currentUser = {
+                                uid: user.uid,
+                                name: localStorage.getItem('userName') || 'Anonymous User',
+                                email: localStorage.getItem('userEmail') || 'anonymous@example.com',
+                                role: localStorage.getItem('userRole') || 'sales',
+                                isOnline: true
+                            };
+                            
+                            // Set team ID (for demo, use 'default-team')
+                            this.teamId = localStorage.getItem('teamId') || 'default-team';
+                            
+                            // Update user presence
+                            await this.updateUserPresence(true);
+                            
+                            resolve();
+                        } else {
+                            // Sign in anonymously
+                            await signInAnonymously(this.auth);
+                        }
+                    } catch (error) {
+                        console.error('Auth state change error:', error);
+                        resolve(); // Continue without auth
+                    }
+                });
+            } catch (error) {
+                console.error('Setup auth error:', error);
+                resolve(); // Continue without auth
+            }
         });
     }
 
