@@ -9,6 +9,12 @@
 </head>
 <body>
     <div class="container">
+        <!-- Background Running Indicator -->
+        <div class="background-indicator" id="backgroundIndicator">
+            <div class="background-pulse"></div>
+            <span>Running in Background</span>
+        </div>
+        
         <!-- Header -->
         <header class="header">
             <div class="header-left">
@@ -326,8 +332,8 @@
 
             <!-- Step 4: Progress Tracking -->
             <div class="step-content" id="progressStep">
-                <div class="progress-container">
-                    <h3>Sending Messages...</h3>
+                <div class="progress-container" id="progressContainer">
+                    <h3>Sending Messages... <span class="wake-lock-status" id="wakeLockStatus"><span class="wake-lock-icon">🔒</span>Wake Lock Active</span></h3>
                     <div class="progress-bar">
                         <div class="progress-fill" id="progressFill"></div>
                     </div>

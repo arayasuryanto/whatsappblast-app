@@ -356,7 +356,8 @@ app.post('/logout', async (req, res) => {
     }
 });
 
-app.listen(3000, () => {
-    console.log("✅ Server berjalan di http://localhost:3000");
+const PORT = process.env.PORT || 1;
+app.listen(PORT, () => {
+    console.log(`✅ Server berjalan di http://localhost:${PORT}`);
     startSock();
 });

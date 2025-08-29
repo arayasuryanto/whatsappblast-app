@@ -10,6 +10,8 @@ class WhatsAppBlastApp {
         this.scheduledCampaigns = [];
         this.isSending = false;
         this.stopSending = false;
+        this.wakeLock = null;
+        this.isPageVisible = true;
         
         this.init();
     }
@@ -28,6 +30,9 @@ class WhatsAppBlastApp {
             
             // Start scheduled campaign checker
             this.startScheduledChecker();
+            
+            // Setup page visibility handling
+            this.setupPageVisibilityHandling();
             
             console.log('App initialized successfully');
         } catch (error) {
@@ -197,6 +202,182 @@ class WhatsAppBlastApp {
         
         // Initialize delay preview
         this.updateDelayPreview();
+    }
+
+    setupPageVisibilityHandling() {
+        // Keep app running in background using multiple methods
+        
+        // 1. Request Wake Lock API to prevent sleep
+        this.requestWakeLock();
+        
+        // 2. Handle visibility change events
+        document.addEventListener('visibilitychange', () => {
+            this.isPageVisible = !document.hidden;
+            
+            if (document.hidden) {
+                console.log('Page is now hidden - keeping processes running');
+                // Re-request wake lock when page becomes hidden
+                this.requestWakeLock();
+                
+                // Show background indicator if sending
+                if (this.isSending) {
+                    this.updateWakeLockStatus(true);
+                }
+            } else {
+                console.log('Page is now visible');
+                // Re-request wake lock when page becomes visible again
+                this.requestWakeLock();
+                
+                // Update visual indicators
+                this.updateWakeLockStatus(true);
+            }
+        });
+        
+        // 3. Use Web Workers for background processing (fallback)
+        if (typeof Worker !== 'undefined') {
+            try {
+                // Create a simple worker to keep the page active
+                const workerCode = `
+                    let keepAliveInterval = setInterval(() => {
+                        self.postMessage({ type: 'keepalive', timestamp: Date.now() });
+                    }, 5000);
+                    
+                    self.addEventListener('message', (e) => {
+                        if (e.data.type === 'stop') {
+                            clearInterval(keepAliveInterval);
+                        }
+                    });
+                `;
+                
+                const blob = new Blob([workerCode], { type: 'application/javascript' });
+                const workerUrl = URL.createObjectURL(blob);
+                this.keepAliveWorker = new Worker(workerUrl);
+                
+                this.keepAliveWorker.onmessage = (e) => {
+                    if (e.data.type === 'keepalive') {
+                        // Keep the main thread active
+                        if (this.isSending) {
+                            console.log('Background keep-alive pulse:', new Date(e.data.timestamp).toLocaleTimeString());
+                        }
+                    }
+                };
+            } catch (error) {
+                console.log('Web Worker not available:', error);
+            }
+        }
+        
+        // 4. Prevent page from being suspended by playing silent audio (last resort)
+        this.createSilentAudioContext();
+        
+        // 5. Re-request wake lock periodically
+        setInterval(() => {
+            if (this.isSending && !document.hidden) {
+                this.requestWakeLock();
+            }
+        }, 30000); // Every 30 seconds
+    }
+
+    async requestWakeLock() {
+        if ('wakeLock' in navigator) {
+            try {
+                // Release existing wake lock if any
+                if (this.wakeLock) {
+                    await this.wakeLock.release();
+                    this.wakeLock = null;
+                }
+                
+                // Request new wake lock
+                this.wakeLock = await navigator.wakeLock.request('screen');
+                console.log('Wake Lock acquired - page will stay active');
+                
+                // Update visual indicators
+                this.updateWakeLockStatus(true);
+                
+                // Re-acquire wake lock if released
+                this.wakeLock.addEventListener('release', () => {
+                    console.log('Wake Lock was released');
+                    this.updateWakeLockStatus(false);
+                    // Re-request if still sending
+                    if (this.isSending) {
+                        setTimeout(() => this.requestWakeLock(), 1000);
+                    }
+                });
+            } catch (err) {
+                console.log('Wake Lock error:', err.message);
+                this.updateWakeLockStatus(false);
+            }
+        } else {
+            console.log('Wake Lock API not supported');
+            this.updateWakeLockStatus(false);
+        }
+    }
+
+    updateWakeLockStatus(active) {
+        const wakeLockStatus = document.getElementById('wakeLockStatus');
+        const backgroundIndicator = document.getElementById('backgroundIndicator');
+        const progressContainer = document.getElementById('progressContainer');
+        
+        if (wakeLockStatus) {
+            if (active) {
+                wakeLockStatus.classList.add('active');
+                wakeLockStatus.style.display = 'inline-flex';
+            } else {
+                wakeLockStatus.classList.remove('active');
+                wakeLockStatus.style.display = 'none';
+            }
+        }
+        
+        if (this.isSending) {
+            if (backgroundIndicator) {
+                backgroundIndicator.classList.toggle('active', true);
+            }
+            if (progressContainer) {
+                progressContainer.classList.toggle('background-mode', true);
+            }
+        } else {
+            if (backgroundIndicator) {
+                backgroundIndicator.classList.toggle('active', false);
+            }
+            if (progressContainer) {
+                progressContainer.classList.toggle('background-mode', false);
+            }
+        }
+    }
+
+    createSilentAudioContext() {
+        try {
+            // Create an audio context that plays silence to prevent suspension
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            this.audioContext = new AudioContext();
+            
+            // Create a silent audio source
+            const createSilentSource = () => {
+                const source = this.audioContext.createBufferSource();
+                const buffer = this.audioContext.createBuffer(1, 1, 22050);
+                source.buffer = buffer;
+                source.connect(this.audioContext.destination);
+                return source;
+            };
+            
+            // Play silent audio when sending
+            this.playSilentAudio = () => {
+                if (this.audioContext.state === 'suspended') {
+                    this.audioContext.resume();
+                }
+                const source = createSilentSource();
+                source.start();
+            };
+            
+            // Start playing silent audio periodically during sending
+            setInterval(() => {
+                if (this.isSending) {
+                    this.playSilentAudio();
+                }
+            }, 10000); // Every 10 seconds
+            
+        } catch (error) {
+            console.log('Audio context not available:', error);
+        }
     }
 
     async checkConnection() {
@@ -1026,6 +1207,15 @@ class WhatsAppBlastApp {
         this.isSending = true;
         this.stopSending = false;
         
+        // Request wake lock to keep page active
+        await this.requestWakeLock();
+        
+        // Start audio context to prevent suspension
+        if (this.audioContext) {
+            this.audioContext.resume();
+            this.playSilentAudio();
+        }
+        
         // Reset stop button
         const stopBtn = document.getElementById('stopSending');
         if (stopBtn) {
@@ -1178,6 +1368,33 @@ class WhatsAppBlastApp {
         this.isSending = false;
         this.stopSending = false;
         
+        // Release wake lock after completion
+        if (this.wakeLock) {
+            try {
+                await this.wakeLock.release();
+                this.wakeLock = null;
+                console.log('Wake lock released after campaign completion');
+            } catch (err) {
+                console.log('Error releasing wake lock:', err);
+            }
+        }
+        
+        // Pause audio context
+        if (this.audioContext && this.audioContext.state === 'running') {
+            this.audioContext.suspend();
+        }
+        
+        // Update visual indicators
+        this.updateWakeLockStatus(false);
+        
+        // Show notification if page is hidden
+        if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+            new Notification('Campaign Complete!', {
+                body: `Sent: ${sent}, Failed: ${failed}`,
+                icon: '/favicon.ico'
+            });
+        }
+        
         // Show summary after completion
         setTimeout(() => {
             const stopped = this.sendingResults.filter(r => r.status === 'stopped').length;
@@ -1189,6 +1406,11 @@ class WhatsAppBlastApp {
         document.getElementById('sentCount').textContent = sent;
         document.getElementById('failedCount').textContent = failed;
         document.getElementById('totalSent').textContent = total;
+        
+        // Request notification permission for next time
+        if ('Notification' in window && Notification.permission === 'default') {
+            Notification.requestPermission();
+        }
         
         // Add stopped count if applicable
         const summaryText = document.querySelector('#step5 .summary');
@@ -1439,19 +1661,53 @@ class WhatsAppBlastApp {
         this.goToStep(1);
     }
     
-    stopCampaign() {
-        if (this.isSending) {
-            if (confirm('Are you sure you want to stop the campaign? Messages that have not been sent will be marked as stopped.')) {
-                console.log('User requested to stop campaign');
-                this.stopSending = true;
-                
-                // Update stop button
-                const stopBtn = document.getElementById('stopSending');
-                if (stopBtn) {
-                    stopBtn.textContent = 'Stopping...';
-                    stopBtn.disabled = true;
-                    stopBtn.style.backgroundColor = '#999';
+    async stopCampaign() {
+        if (!this.isSending) {
+            return;
+        }
+        
+        const confirmStop = confirm('Are you sure you want to stop the campaign? Messages that have not been sent will be marked as stopped.');
+        
+        if (confirmStop) {
+            console.log('User requested to stop campaign');
+            this.stopSending = true;
+            
+            // Update stop button immediately
+            const stopBtn = document.getElementById('stopSending');
+            if (stopBtn) {
+                stopBtn.textContent = 'Stopping...';
+                stopBtn.disabled = true;
+                stopBtn.style.backgroundColor = '#999';
+            }
+            
+            // Release wake lock when stopping
+            if (this.wakeLock) {
+                try {
+                    await this.wakeLock.release();
+                    this.wakeLock = null;
+                    console.log('Wake lock released after stopping campaign');
+                } catch (err) {
+                    console.log('Error releasing wake lock:', err);
                 }
+            }
+            
+            // Stop background worker if exists
+            if (this.keepAliveWorker) {
+                this.keepAliveWorker.postMessage({ type: 'stop' });
+            }
+            
+            // Pause audio context
+            if (this.audioContext && this.audioContext.state === 'running') {
+                this.audioContext.suspend();
+            }
+            
+            // Update visual indicators
+            this.updateWakeLockStatus(false);
+            
+            // Force update the progress display
+            const progressText = document.getElementById('progressText');
+            if (progressText) {
+                progressText.textContent = 'Campaign stopping...';
             }
         }
     }

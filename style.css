@@ -1450,3 +1450,112 @@ h2 {
 .personalization-help strong {
     color: #1b5e20;
 }
+
+/* Background running indicators */
+.background-indicator {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    background: rgba(37, 211, 102, 0.9);
+    color: white;
+    padding: 8px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    z-index: 1000;
+    display: none;
+    backdrop-filter: blur(10px);
+    animation: pulse 2s infinite;
+}
+
+.background-indicator.active {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.background-pulse {
+    width: 8px;
+    height: 8px;
+    background: white;
+    border-radius: 50%;
+    animation: backgroundPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes backgroundPulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.3; transform: scale(0.8); }
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 0.8; }
+    50% { opacity: 1; }
+}
+
+/* Page hidden overlay */
+.page-hidden-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+    text-align: center;
+}
+
+.page-hidden-overlay.active {
+    display: flex;
+}
+
+.hidden-message {
+    font-size: 24px;
+    margin-bottom: 20px;
+}
+
+.hidden-details {
+    font-size: 16px;
+    opacity: 0.8;
+    max-width: 500px;
+    line-height: 1.5;
+}
+
+/* Wake lock status */
+.wake-lock-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    color: #666;
+    margin-left: 10px;
+}
+
+.wake-lock-status.active {
+    color: #25d366;
+}
+
+.wake-lock-icon {
+    font-size: 12px;
+}
+
+/* Progress enhancements for background mode */
+.progress-container.background-mode {
+    border: 2px solid #25d366;
+    border-radius: 8px;
+}
+
+.progress-container.background-mode::before {
+    content: "🔒 Background Mode Active - Keep this tab open";
+    display: block;
+    background: #25d366;
+    color: white;
+    padding: 8px;
+    text-align: center;
+    font-size: 12px;
+    margin-bottom: 10px;
+    border-radius: 4px;
+}
