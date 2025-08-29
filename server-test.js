@@ -20,15 +20,26 @@ const server = http.createServer((req, res) => {
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
     if (req.url === '/health') {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
+        console.log('🔍 Health check requested - responding with 200 OK');
+        res.writeHead(200, { 
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache'
+        });
+        const healthResponse = {
             status: 'ok',
             timestamp: new Date().toISOString(),
             uptime: process.uptime(),
             node: process.version,
             port: PORT,
-            message: 'Ultra minimal server is running'
-        }));
+            message: 'Ultra minimal server is running',
+            ready: true,
+            checks: {
+                server: 'healthy',
+                memory: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + 'MB'
+            }
+        };
+        console.log('✅ Health check response sent:', JSON.stringify(healthResponse, null, 2));
+        res.end(JSON.stringify(healthResponse));
     } else if (req.url === '/' || req.url === '/index.html') {
         const indexPath = path.join(__dirname, 'index.html');
         if (fs.existsSync(indexPath)) {

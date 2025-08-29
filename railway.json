@@ -7,8 +7,6 @@
   "deploy": {
     "startCommand": "node server-test.js",
     "restartPolicyType": "ON_FAILURE",
-    "restartPolicyMaxRetries": 3,
-    "healthcheckPath": "/health",
-    "healthcheckTimeout": 30
+    "restartPolicyMaxRetries": 1
   }
 }
