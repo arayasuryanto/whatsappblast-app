@@ -1,12 +1,20 @@
 # nixpacks.toml
 [phases.setup]
-nixPkgs = ["nodejs_20", "npm-9_x"]
+nixPkgs = ["nodejs_20", "python3", "gcc"]
 
 [phases.install]
-cmds = ["npm ci --omit=dev"]
+cmds = [
+  "npm ci --omit=dev --maxsockets=1",
+  "mkdir -p uploads auth_info",
+  "chmod -R 755 uploads auth_info"
+]
 
 [phases.build]
-cmds = ["echo 'Build complete'"]
+cmds = ["echo 'Build complete - WhatsApp Blast ready'"]
+
+[variables]
+NODE_ENV = "production"
+NODE_OPTIONS = "--max_old_space_size=512"
 
 [start]
 cmd = "npm start"

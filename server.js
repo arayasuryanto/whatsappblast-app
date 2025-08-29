@@ -46,6 +46,12 @@ let connectionState = {
 
 async function startSock() {
     try {
+        // Create auth directory if it doesn't exist
+        const authPath = path.join(__dirname, 'auth_info');
+        if (!fs.existsSync(authPath)) {
+            fs.mkdirSync(authPath, { recursive: true });
+        }
+        
         const { state, saveCreds } = await useMultiFileAuthState('auth_info');
         sock = makeWASocket({
             auth: state,
@@ -55,9 +61,10 @@ async function startSock() {
             keepAliveIntervalMs: 10000,
             printQRInTerminal: false,
             qrTimeout: 60000, // QR timeout 60 seconds
-            markOnlineOnConnect: true,
-            generateHighQualityLinkPreview: true,
-            syncFullHistory: false
+            markOnlineOnConnect: false, // Don't mark online immediately
+            generateHighQualityLinkPreview: false, // Reduce memory usage
+            syncFullHistory: false,
+            getMessage: async () => null // Reduce memory usage
         });
 
     sock.ev.on('connection.update', (update) => {
@@ -104,17 +111,22 @@ async function startSock() {
                 }
             }
             
-            if (shouldReconnect && statusCode !== 401) {
+            // In production, be more conservative with reconnections
+            if (shouldReconnect && statusCode !== 401 && process.env.NODE_ENV !== 'production') {
                 console.log('🔄 Auto-reconnecting in 5 seconds...');
                 setTimeout(() => {
                     startSock();
                 }, 5000);
-            } else if (statusCode === 401) {
+            } else if (statusCode === 401 && process.env.NODE_ENV !== 'production') {
                 // For auth errors, restart with fresh session
                 console.log('🔄 Starting fresh connection after auth failure...');
                 setTimeout(() => {
                     startSock();
                 }, 3000);
+            } else if (process.env.NODE_ENV === 'production') {
+                console.log('🔄 Connection will restart when needed (production mode)');
+                // Reset sock to allow lazy loading
+                sock = null;
             }
         }
     });
@@ -135,6 +147,16 @@ app.get('/', (req, res) => {
 
 // Get connection status
 app.get('/status', async (req, res) => {
+    // Initialize WhatsApp connection if not already started
+    if (!sock && !connectionState.connected && process.env.NODE_ENV === 'production') {
+        console.log('🔄 Lazy loading WhatsApp connection...');
+        try {
+            startSock();
+        } catch (error) {
+            console.error('❌ Error starting WhatsApp:', error);
+        }
+    }
+    
     let qrCodeData = null;
     if (connectionState.qrCode) {
         try {
@@ -148,7 +170,8 @@ app.get('/status', async (req, res) => {
         connected: connectionState.connected,
         qr: connectionState.qrCode,
         qrImage: qrCodeData,
-        phone: connectionState.phone
+        phone: connectionState.phone,
+        server: 'ready'
     });
 });
 
@@ -379,22 +402,31 @@ app.post('/logout', async (req, res) => {
 const PORT = process.env.PORT || 3000;
 
 // Add error handling for server startup
-app.listen(PORT, '0.0.0.0', (error) => {
-    if (error) {
-        console.error('❌ Error starting server:', error);
-        process.exit(1);
-    }
-    
+const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`✅ Server running on port ${PORT}`);
     console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`📱 WhatsApp connection initializing...`);
+    console.log(`📱 WhatsApp connection will initialize when needed...`);
     
-    // Start WhatsApp connection
-    try {
-        startSock();
-    } catch (error) {
-        console.error('❌ Error initializing WhatsApp:', error);
-        // Don't exit - server can still serve the UI
+    // Delay WhatsApp initialization to avoid memory issues on startup
+    if (process.env.NODE_ENV !== 'production') {
+        // Only auto-start in development
+        setTimeout(() => {
+            try {
+                console.log('🔄 Starting WhatsApp connection...');
+                startSock();
+            } catch (error) {
+                console.error('❌ Error initializing WhatsApp:', error);
+            }
+        }, 3000);
+    }
+});
+
+// Handle server errors
+server.on('error', (error) => {
+    console.error('❌ Server error:', error);
+    if (error.code === 'EADDRINUSE') {
+        console.error(`Port ${PORT} is already in use`);
+        process.exit(1);
     }
 });
 
