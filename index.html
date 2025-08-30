@@ -417,6 +417,13 @@
                 <div class="qr-container">
                     <div id="qrCode"></div>
                     <p>Scan this QR code with your WhatsApp to connect</p>
+                    
+                    <!-- Debug Info -->
+                    <div style="margin-top: 20px; padding: 10px; background: #f5f5f5; border-radius: 5px; font-family: monospace; font-size: 12px;">
+                        <strong>Debug Info:</strong><br>
+                        <div id="debugInfo">Loading debug info...</div>
+                        <button onclick="window.app.showDebugInfo()" style="margin-top: 10px; padding: 5px 10px; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer;">Refresh Debug Info</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -465,8 +472,8 @@
         </div>
     </div>
 
-    <script src="database-service.js"></script>
-    <script src="script.js"></script>
-    <script src="realtime-ui.js"></script>
+    <script src="database-service.js?v=20250830-2"></script>
+    <script src="script.js?v=20250830-2"></script>
+    <script src="realtime-ui.js?v=20250830-2"></script>
 </body>
 </html>

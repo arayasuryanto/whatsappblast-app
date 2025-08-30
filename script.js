@@ -27,41 +27,46 @@ class WhatsAppBlastApp {
             // Try to detect server URL based on current location
             const currentHost = window.location.hostname;
             const currentProtocol = window.location.protocol;
+            const currentPort = window.location.port;
             
-            console.log('🌐 Detecting server URL...', { currentHost, currentProtocol, currentPort: window.location.port });
+            console.log('🌐 Detecting server URL...', { 
+                currentHost, 
+                currentProtocol, 
+                currentPort,
+                locationHref: window.location.href 
+            });
+            
+            // For Synology deployments, common patterns are:
+            // - http://nas-ip:port
+            // - https://nas-ip:port  
+            // - Same host/port as the current page
             
             // Check if we're running on localhost (development)
             if (currentHost === 'localhost' || currentHost === '127.0.0.1') {
                 this.serverUrl = `${currentProtocol}//${currentHost}:3000`;
                 console.log('📍 Development mode detected - using port 3000');
             } 
-            // For production deployments (Synology, etc.)
+            // For production deployments (Synology, etc.) - always use same host and port
             else {
-                const currentPort = window.location.port;
-                // If there's a port in current URL, use it; otherwise assume standard ports
-                if (currentPort && currentPort !== '80' && currentPort !== '443') {
+                // Use exact same protocol, host, and port as current page
+                if (currentPort) {
                     this.serverUrl = `${currentProtocol}//${currentHost}:${currentPort}`;
-                    console.log('📍 Production mode with custom port:', currentPort);
+                    console.log('📍 Production mode with port:', currentPort);
                 } else {
-                    // For standard ports, try common Node.js ports first
-                    if (currentProtocol === 'https:') {
-                        this.serverUrl = `${currentProtocol}//${currentHost}`;
-                        console.log('📍 Production HTTPS mode - using standard port');
-                    } else {
-                        // For HTTP, still try to use same port as current page
-                        this.serverUrl = `${currentProtocol}//${currentHost}${currentPort ? ':' + currentPort : ''}`;
-                        console.log('📍 Production HTTP mode');
-                    }
+                    this.serverUrl = `${currentProtocol}//${currentHost}`;
+                    console.log('📍 Production mode, standard port');
                 }
             }
             
             console.log('✅ Server URL detected:', this.serverUrl);
+            console.log('🔗 Will make API calls to:', `${this.serverUrl}/status`);
             return this.serverUrl;
             
         } catch (error) {
             console.error('❌ Error detecting server URL:', error);
             // Fallback to relative URLs if detection fails
             this.serverUrl = '';
+            console.log('🔄 Falling back to relative URLs');
             return this.serverUrl;
         }
     }
@@ -122,6 +127,31 @@ class WhatsAppBlastApp {
             console.error('   - Network connectivity problems');
             console.error('   - Firewall blocking requests');
             return false;
+        }
+    }
+
+    // Show debug information for troubleshooting
+    showDebugInfo() {
+        const serverUrl = this.getServerUrl();
+        const debugInfo = document.getElementById('debugInfo');
+        
+        if (debugInfo) {
+            debugInfo.innerHTML = `
+                <strong>Current URL:</strong> ${window.location.href}<br>
+                <strong>Detected Server URL:</strong> ${serverUrl}<br>
+                <strong>Status Endpoint:</strong> ${serverUrl}/status<br>
+                <strong>Protocol:</strong> ${window.location.protocol}<br>
+                <strong>Host:</strong> ${window.location.hostname}<br>
+                <strong>Port:</strong> ${window.location.port || 'default'}<br>
+                <strong>User Agent:</strong> ${navigator.userAgent.substring(0, 50)}...<br>
+                <strong>Timestamp:</strong> ${new Date().toLocaleString()}
+            `;
+            
+            // Test connectivity in real-time
+            this.testServerConnectivity().then(success => {
+                const status = success ? '✅ Connected' : '❌ Failed';
+                debugInfo.innerHTML += `<br><strong>Connection Test:</strong> ${status}`;
+            });
         }
     }
 
@@ -748,6 +778,9 @@ class WhatsAppBlastApp {
         
         // Always show the modal
         qrModal.classList.add('active');
+        
+        // Initialize debug info when modal opens
+        setTimeout(() => this.showDebugInfo(), 100);
         
         if (qrImageData) {
             // Create QR code image
