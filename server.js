@@ -21,6 +21,19 @@ app.use(bodyParser.json({ limit: '10mb' }));
 app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
 app.use(express.static(path.join(__dirname)));
 
+// Explicit routes for JavaScript files (for Railway compatibility)
+app.get('/script.js', (req, res) => {
+    res.sendFile(path.join(__dirname, 'script.js'));
+});
+
+app.get('/database-service.js', (req, res) => {
+    res.sendFile(path.join(__dirname, 'database-service.js'));
+});
+
+app.get('/realtime-ui.js', (req, res) => {
+    res.sendFile(path.join(__dirname, 'realtime-ui.js'));
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
     res.json({
