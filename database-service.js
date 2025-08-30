@@ -62,6 +62,14 @@ class DatabaseService {
         // Update user in sync data
         this.updateCurrentUser();
         
+        // Load campaigns from server immediately after initialization
+        setTimeout(() => {
+            this.loadCampaignsFromServer().then(() => {
+                console.log('📡 Initial server sync completed');
+                this.triggerCallbacks();
+            });
+        }, 1000);
+        
         console.log('✅ Local sync initialized');
         console.log('Current user:', this.currentUser);
         console.log('Team ID:', this.teamId);
@@ -75,9 +83,9 @@ class DatabaseService {
     }
     
     initializeLocalSync() {
-        // Set up a simple sync mechanism using localStorage + periodic updates
+        // Set up a simple sync mechanism with server as primary source
         this.syncData = {
-            campaigns: this.getLocal('sync_campaigns', []),
+            campaigns: [], // Start empty, will load from server
             activities: this.getLocal('sync_activities', []),
             users: this.getLocal('sync_users', []),
             lastSync: this.getLocal('last_sync', 0)
@@ -231,8 +239,7 @@ class DatabaseService {
         if (this.listeners.has('campaigns')) {
             const callback = this.listeners.get('campaigns');
             if (callback) {
-                // Always ensure we have the latest data from localStorage
-                this.syncData.campaigns = this.getLocal('sync_campaigns', []);
+                // Use existing syncData.campaigns (from server or local sync) - don't reload from localStorage
                 console.log('🔄 Triggering campaigns callback with', this.syncData.campaigns.length, 'campaigns');
                 callback(this.syncData.campaigns);
             }
@@ -456,6 +463,7 @@ class DatabaseService {
 
     async loadCampaignsFromServer() {
         try {
+            console.log('📡 Loading campaigns from server...');
             const serverUrl = this.getServerUrl();
             const response = await fetch(`${serverUrl}/api/campaigns`, {
                 method: 'GET',
@@ -467,42 +475,60 @@ class DatabaseService {
             if (response.ok) {
                 const serverCampaigns = await response.json();
                 
-                // Merge server campaigns with local campaigns
-                const allCampaigns = [
+                // Use server campaigns as primary source
+                const allServerCampaigns = [
                     ...serverCampaigns.ongoing || [],
                     ...serverCampaigns.completed || [],
                     ...serverCampaigns.scheduled || []
                 ];
                 
-                // Remove duplicates (prefer server data)
-                const uniqueCampaigns = [];
-                const serverIds = allCampaigns.map(c => c.id);
+                // Get local campaigns to check for unsaved ones
+                const localCampaigns = this.getLocal('sync_campaigns', []);
+                const serverIds = allServerCampaigns.map(c => c.id);
                 
-                // Add all server campaigns
-                uniqueCampaigns.push(...allCampaigns);
+                // Find local campaigns that haven't been synced to server yet
+                const unsynced = localCampaigns.filter(local => !serverIds.includes(local.id));
                 
-                // Add local campaigns that aren't on server yet
-                this.syncData.campaigns.forEach(localCampaign => {
-                    if (!serverIds.includes(localCampaign.id)) {
-                        uniqueCampaigns.push(localCampaign);
+                // Sync any unsynced local campaigns to server
+                for (const campaign of unsynced) {
+                    console.log('📤 Syncing local campaign to server:', campaign.name);
+                    try {
+                        await fetch(`${serverUrl}/api/campaigns`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                ...campaign,
+                                createdBy: this.currentUser.name
+                            })
+                        });
+                    } catch (syncError) {
+                        console.warn('Failed to sync campaign:', campaign.name, syncError.message);
                     }
-                });
+                }
                 
-                // Update local data with merged campaigns
-                this.syncData.campaigns = uniqueCampaigns;
+                // Set server data as the primary source
+                this.syncData.campaigns = [...allServerCampaigns, ...unsynced];
                 this.saveLocal('sync_campaigns', this.syncData.campaigns);
                 
-                console.log('📡 Loaded campaigns from server:', {
-                    total: uniqueCampaigns.length,
+                console.log('📡 Server campaigns loaded successfully:', {
+                    total: this.syncData.campaigns.length,
                     ongoing: (serverCampaigns.ongoing || []).length,
                     completed: (serverCampaigns.completed || []).length,
                     scheduled: (serverCampaigns.scheduled || []).length
                 });
+                
+                return true;
             } else {
-                console.warn('⚠️ Failed to load campaigns from server');
+                console.warn('⚠️ Server response error:', response.status);
+                // Fallback to local data if server fails
+                this.syncData.campaigns = this.getLocal('sync_campaigns', []);
+                return false;
             }
         } catch (error) {
-            console.warn('⚠️ Server load error:', error.message);
+            console.warn('⚠️ Server connection error:', error.message);
+            // Fallback to local data if server fails
+            this.syncData.campaigns = this.getLocal('sync_campaigns', []);
+            return false;
         }
     }
 
