@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Firebase Test</title>
+</head>
+<body>
+    <h1>Firebase Connection Test</h1>
+    <div id="status">Checking...</div>
+    <div id="activities"></div>
+    
+    <script type="module">
+        // Test Firebase connection
+        async function testFirebase() {
+            try {
+                const { initializeApp } = await import('https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js');
+                const { getDatabase, ref, push, set, onValue } = await import('https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js');
+                
+                const firebaseConfig = {
+                    apiKey: "AIzaSyBn-EvBHSKUkFBdPOXUZJDmvDPgnD87lYc",
+                    authDomain: "whatsapp-blast-demo.firebaseapp.com",
+                    databaseURL: "https://whatsapp-blast-team-default-rtdb.asia-southeast1.firebasedatabase.app",
+                    projectId: "whatsapp-blast-team",
+                    storageBucket: "whatsapp-blast-team.firebasestorage.app",
+                    messagingSenderId: "892116353481",
+                    appId: "1:892116353481:web:024363c3d5b79d854d6818"
+                };
+                
+                const app = initializeApp(firebaseConfig);
+                const db = getDatabase(app);
+                
+                document.getElementById('status').innerHTML = '✅ Firebase Connected!';
+                
+                // Test write
+                const testRef = ref(db, 'test/' + Date.now());
+                await set(testRef, {
+                    message: 'Test activity',
+                    timestamp: Date.now()
+                });
+                
+                // Listen to activities
+                const activitiesRef = ref(db, 'teams/default-team/activities');
+                onValue(activitiesRef, (snapshot) => {
+                    const data = snapshot.val();
+                    if (data) {
+                        document.getElementById('activities').innerHTML = '<h3>Recent Activities:</h3>' + 
+                            Object.values(data).slice(-5).map(a => 
+                                `<div>${a.text} - ${new Date(a.timestamp).toLocaleTimeString()}</div>`
+                            ).join('');
+                    }
+                });
+                
+                return true;
+            } catch (error) {
+                document.getElementById('status').innerHTML = '❌ Firebase Error: ' + error.message;
+                return false;
+            }
+        }
+        
+        testFirebase();
+    </script>
+</body>
+</html>

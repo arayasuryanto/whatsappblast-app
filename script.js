@@ -1871,7 +1871,7 @@ class WhatsAppBlastApp {
 
     showHomePage() {
         try {
-            console.log('Showing home page...');
+            console.log('🏠 Showing home page...');
             const homePage = document.getElementById('homePage');
             const campaignPage = document.getElementById('campaignPage');
             
@@ -1879,13 +1879,7 @@ class WhatsAppBlastApp {
                 homePage.classList.add('active');
                 campaignPage.classList.remove('active');
                 
-                // Refresh sync data before updating dashboard
-                if (window.databaseService && window.databaseService.syncData) {
-                    // Reload sync data from localStorage
-                    window.databaseService.syncData.campaigns = window.databaseService.getLocal('sync_campaigns', []);
-                    console.log('🔄 Refreshed sync data:', window.databaseService.syncData.campaigns.length, 'campaigns');
-                }
-                
+                // Update dashboard with current data (sync system now always uses fresh data)
                 this.updateCampaignDashboard();
             } else {
                 console.error('Page elements not found');
@@ -1952,6 +1946,13 @@ class WhatsAppBlastApp {
     }
     
     renderDashboardSections(scheduledCampaigns, ongoingCampaigns, completedCampaigns) {
+        console.log('🎨 Rendering dashboard sections:', {
+            scheduled: scheduledCampaigns.length,
+            ongoing: ongoingCampaigns.length,
+            completed: completedCampaigns.length,
+            timestamp: new Date().toLocaleTimeString()
+        });
+        
         const scheduledList = document.getElementById('scheduledList');
         const ongoingList = document.getElementById('ongoingList');
         const completedList = document.getElementById('completedList');

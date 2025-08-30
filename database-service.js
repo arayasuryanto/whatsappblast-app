@@ -51,6 +51,10 @@ class DatabaseService {
             lastSync: this.getLocal('last_sync', 0)
         };
         
+        // Track when sync system was initialized to prevent early callback triggers
+        const now = Date.now();
+        localStorage.setItem('sync_init_time', now.toString());
+        
         // Start periodic sync (simulates real-time updates)
         this.startSyncLoop();
     }
@@ -173,8 +177,15 @@ class DatabaseService {
             }
         }
         
+        // Don't trigger callbacks too frequently during initial load (first 10 seconds)
+        const initTime = this.getLocal('sync_init_time', now);
+        if (now - initTime < 10000) {
+            console.log('🔕 Skipping callback trigger during initial load phase');
+            return;
+        }
+        
         const lastCheck = this.getLocal('last_update_check', 0);
-        if (now - lastCheck > 5000) { // Check every 5 seconds
+        if (now - lastCheck > 8000) { // Increased to 8 seconds to reduce frequency
             // Trigger callbacks to update UI
             this.triggerCallbacks();
             localStorage.setItem('last_update_check', now.toString());
@@ -182,20 +193,33 @@ class DatabaseService {
     }
     
     triggerCallbacks() {
-        // Trigger all registered callbacks with current data
+        // Only trigger callbacks if we have meaningful data changes
+        // This prevents clearing dashboard on initial load
+        
         if (this.listeners.has('campaigns')) {
             const callback = this.listeners.get('campaigns');
-            if (callback) callback(this.syncData.campaigns);
+            if (callback) {
+                // Always ensure we have the latest data from localStorage
+                this.syncData.campaigns = this.getLocal('sync_campaigns', []);
+                console.log('🔄 Triggering campaigns callback with', this.syncData.campaigns.length, 'campaigns');
+                callback(this.syncData.campaigns);
+            }
         }
         
         if (this.listeners.has('activities')) {
             const callback = this.listeners.get('activities');
-            if (callback) callback(this.syncData.activities);
+            if (callback) {
+                this.syncData.activities = this.getLocal('sync_activities', []);
+                callback(this.syncData.activities);
+            }
         }
         
         if (this.listeners.has('team-members')) {
             const callback = this.listeners.get('team-members');
-            if (callback) callback(this.syncData.users);
+            if (callback) {
+                this.syncData.users = this.getLocal('sync_users', []);
+                callback(this.syncData.users);
+            }
         }
     }
 

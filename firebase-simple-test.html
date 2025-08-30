@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Simple Firebase Test</title>
+</head>
+<body>
+    <h1>Simple Firebase Connection Test</h1>
+    <div id="status">Testing...</div>
+    <div id="log"></div>
+    
+    <script type="module">
+        const log = (message) => {
+            console.log(message);
+            document.getElementById('log').innerHTML += '<div>' + message + '</div>';
+        };
+
+        try {
+            log('1. Starting Firebase test...');
+            
+            // Import Firebase modules
+            const { initializeApp } = await import('https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js');
+            log('2. ✅ Firebase app module loaded');
+            
+            const { getDatabase, ref, set, get } = await import('https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js');
+            log('3. ✅ Firebase database module loaded');
+            
+            // Firebase config
+            const firebaseConfig = {
+                apiKey: "AIzaSyBn-EvBHSKUkFBdPOXUZJDmvDPgnD87lYc",
+                authDomain: "whatsapp-blast-team.firebaseapp.com",
+                databaseURL: "https://whatsapp-blast-team-default-rtdb.asia-southeast1.firebasedatabase.app",
+                projectId: "whatsapp-blast-team",
+                storageBucket: "whatsapp-blast-team.firebasestorage.app",
+                messagingSenderId: "892116353481",
+                appId: "1:892116353481:web:024363c3d5b79d854d6818"
+            };
+            
+            log('4. Initializing Firebase app...');
+            const app = initializeApp(firebaseConfig);
+            log('5. ✅ Firebase app initialized');
+            
+            log('6. Getting database reference...');
+            const db = getDatabase(app);
+            log('7. ✅ Database reference obtained');
+            
+            // Test write
+            log('8. Testing write to Firebase...');
+            const testRef = ref(db, 'test/' + Date.now());
+            await set(testRef, {
+                message: 'Simple test write',
+                timestamp: Date.now(),
+                browser: navigator.userAgent
+            });
+            log('9. ✅ Write successful!');
+            
+            // Test read
+            log('10. Testing read from Firebase...');
+            const snapshot = await get(testRef);
+            if (snapshot.exists()) {
+                log('11. ✅ Read successful! Data: ' + JSON.stringify(snapshot.val()));
+                document.getElementById('status').innerHTML = '🎉 Firebase is working perfectly!';
+                document.getElementById('status').style.color = 'green';
+            } else {
+                log('11. ❌ No data found');
+            }
+            
+        } catch (error) {
+            log('❌ Error: ' + error.message);
+            log('❌ Stack: ' + error.stack);
+            document.getElementById('status').innerHTML = '❌ Firebase connection failed: ' + error.message;
+            document.getElementById('status').style.color = 'red';
+        }
+    </script>
+</body>
+</html>

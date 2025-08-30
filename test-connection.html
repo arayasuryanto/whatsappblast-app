@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Firebase Connection Test</title>
+</head>
+<body>
+    <h1>Firebase Connection Test</h1>
+    <div id="status">Testing...</div>
+    <div id="results"></div>
+    
+    <button onclick="testWrite()">Test Write Activity</button>
+    <button onclick="testCampaign()">Test Save Campaign</button>
+    
+    <script src="database-service.js"></script>
+    <script>
+        let testResults = [];
+        
+        async function runTests() {
+            const statusEl = document.getElementById('status');
+            const resultsEl = document.getElementById('results');
+            
+            statusEl.innerHTML = 'Initializing Firebase...';
+            testResults.push('🔄 Starting Firebase initialization...');
+            updateResults();
+            
+            try {
+                // First test: Basic Firebase connection
+                console.log('Testing Firebase connection...');
+                const isOnline = await window.databaseService.initialize();
+                
+                if (isOnline) {
+                    statusEl.innerHTML = '✅ Firebase Connected Successfully!';
+                    testResults.push('✅ Firebase initialization: SUCCESS');
+                    testResults.push(`✅ Database available: ${!!window.databaseService.db}`);
+                    testResults.push(`✅ Auth available: ${!!window.databaseService.auth}`);
+                    testResults.push(`✅ Current user: ${window.databaseService.currentUser?.name || 'None'}`);
+                    testResults.push(`✅ Team ID: ${window.databaseService.teamId || 'None'}`);
+                    
+                    updateResults();
+                    
+                    // Wait a bit for auth to settle
+                    setTimeout(async () => {
+                        try {
+                            // Test activity logging
+                            testResults.push('🔄 Testing activity logging...');
+                            updateResults();
+                            
+                            await window.databaseService.logActivity('test_activity', {
+                                message: 'Test activity from connection test',
+                                timestamp: Date.now(),
+                                browser: navigator.userAgent.split(')')[0] + ')'
+                            });
+                            testResults.push('✅ Activity logging: SUCCESS');
+                            updateResults();
+                            
+                            // Test getting activities
+                            testResults.push('🔄 Testing activity retrieval...');
+                            updateResults();
+                            
+                            window.databaseService.getActivities((activities) => {
+                                testResults.push(`✅ Activity retrieval: SUCCESS (${activities.length} activities)`);
+                                if (activities.length > 0) {
+                                    testResults.push(`   Latest activity: ${activities[0].type} by ${activities[0].userName}`);
+                                }
+                                updateResults();
+                            });
+                            
+                        } catch (error) {
+                            testResults.push('❌ Test error: ' + error.message);
+                            updateResults();
+                        }
+                    }, 2000);
+                    
+                } else {
+                    statusEl.innerHTML = '❌ Firebase Connection Failed';
+                    testResults.push('❌ Firebase initialization: FAILED');
+                }
+                
+                updateResults();
+                
+            } catch (error) {
+                console.error('Test error:', error);
+                statusEl.innerHTML = '❌ Error: ' + error.message;
+                testResults.push('❌ Error: ' + error.message);
+                testResults.push('❌ Stack: ' + error.stack);
+                updateResults();
+            }
+        }
+        
+        function updateResults() {
+            document.getElementById('results').innerHTML = 
+                '<h3>Test Results:</h3>' + 
+                testResults.map(r => '<div>' + r + '</div>').join('');
+        }
+        
+        async function testWrite() {
+            try {
+                await window.databaseService.logActivity('manual_test', {
+                    message: 'Manual test button clicked',
+                    timestamp: Date.now()
+                });
+                alert('Activity logged successfully!');
+            } catch (error) {
+                alert('Error logging activity: ' + error.message);
+            }
+        }
+        
+        async function testCampaign() {
+            try {
+                const campaignId = await window.databaseService.saveCampaign({
+                    name: 'Test Campaign',
+                    status: 'ongoing',
+                    contacts: [{name: 'Test', phone: '123456789'}],
+                    message: 'Test message',
+                    progress: 50,
+                    results: {sent: 1, failed: 0, total: 1}
+                });
+                alert('Campaign saved with ID: ' + campaignId);
+            } catch (error) {
+                alert('Error saving campaign: ' + error.message);
+            }
+        }
+        
+        // Run tests on load
+        runTests();
+    </script>
+</body>
+</html>

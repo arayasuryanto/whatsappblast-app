@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug localStorage</title>
+</head>
+<body>
+    <h1>localStorage Debug Tool</h1>
+    <div id="output"></div>
+    
+    <script>
+        const output = document.getElementById('output');
+        
+        // Show all localStorage keys
+        const keys = Object.keys(localStorage);
+        output.innerHTML += '<h2>All localStorage Keys:</h2>';
+        keys.forEach(key => {
+            const value = localStorage.getItem(key);
+            let displayValue = value;
+            
+            // Try to parse JSON for better display
+            try {
+                const parsed = JSON.parse(value);
+                if (Array.isArray(parsed)) {
+                    displayValue = `Array(${parsed.length}) - ${JSON.stringify(parsed).substring(0, 100)}...`;
+                } else {
+                    displayValue = JSON.stringify(parsed, null, 2);
+                }
+            } catch (e) {
+                // Not JSON, show as is
+            }
+            
+            output.innerHTML += `
+                <div style="border: 1px solid #ccc; margin: 10px; padding: 10px;">
+                    <strong>${key}:</strong><br>
+                    <pre style="background: #f5f5f5; padding: 10px; white-space: pre-wrap;">${displayValue}</pre>
+                </div>
+            `;
+        });
+        
+        // Specific sync data
+        output.innerHTML += '<h2>Sync Data Specific:</h2>';
+        const syncKeys = ['sync_campaigns', 'sync_activities', 'sync_users', 'ongoing_campaigns', 'broadcast_history'];
+        
+        syncKeys.forEach(key => {
+            const data = localStorage.getItem(key);
+            if (data) {
+                try {
+                    const parsed = JSON.parse(data);
+                    output.innerHTML += `
+                        <div style="border: 2px solid #25d366; margin: 10px; padding: 10px;">
+                            <strong style="color: #25d366;">${key}: ${Array.isArray(parsed) ? parsed.length + ' items' : 'object'}</strong><br>
+                            <pre style="background: #f0fff0; padding: 10px; white-space: pre-wrap;">${JSON.stringify(parsed, null, 2)}</pre>
+                        </div>
+                    `;
+                } catch (e) {
+                    output.innerHTML += `<p><strong>${key}:</strong> Invalid JSON</p>`;
+                }
+            } else {
+                output.innerHTML += `<p><strong>${key}:</strong> Not found</p>`;
+            }
+        });
+        
+        // Clear buttons
+        output.innerHTML += `
+            <br>
+            <button onclick="clearSync()">Clear Sync Data</button>
+            <button onclick="clearAll()">Clear All localStorage</button>
+            <button onclick="location.reload()">Refresh</button>
+        `;
+        
+        function clearSync() {
+            ['sync_campaigns', 'sync_activities', 'sync_users'].forEach(key => {
+                localStorage.removeItem(key);
+            });
+            location.reload();
+        }
+        
+        function clearAll() {
+            localStorage.clear();
+            location.reload();
+        }
+    </script>
+</body>
+</html>
