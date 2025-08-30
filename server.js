@@ -56,6 +56,8 @@ let connectionState = {
     qrCode: null,
     phone: null
 };
+let connectionAttempts = 0;
+let lastError428 = 0;
 
 async function startSock() {
     try {
@@ -68,22 +70,23 @@ async function startSock() {
         const { state, saveCreds } = await useMultiFileAuthState('auth_info');
         sock = makeWASocket({
             auth: state,
-            browser: ["Chrome", "Linux"], // Revert to stable browser ID
-            connectTimeoutMs: 60000, // Longer connection timeout
-            defaultQueryTimeoutMs: 60000,
-            keepAliveIntervalMs: 30000,
+            browser: ["WhatsApp Business", "Desktop", "1.0.0"], // Business-like browser ID
+            connectTimeoutMs: 45000, // Shorter to avoid 428 errors
+            defaultQueryTimeoutMs: 45000,
+            keepAliveIntervalMs: 25000, // More frequent keep-alives
             printQRInTerminal: false,
-            qrTimeout: 120000, // 2 minutes QR timeout
+            qrTimeout: 180000, // 3 minutes QR timeout for cloud
             markOnlineOnConnect: false,
             generateHighQualityLinkPreview: false,
             syncFullHistory: false,
+            // Additional Railway/cloud deployment optimizations
+            retryRequestDelayMs: 2000, // Longer delays to avoid 428
+            maxMsgRetryCount: 1, // Fewer retries to avoid spam detection
+            fireInitQueries: false,
             getMessage: async () => null,
-            retryRequestDelayMs: 10000, // Even longer retry delay
-            maxMsgRetryCount: 2, // Fewer retries
             downloadHistory: false,
             shouldSyncHistoryMessage: () => false,
-            emitOwnEvents: false,
-            fireInitQueries: false // Don't fire initial queries
+            emitOwnEvents: false
         });
 
     sock.ev.on('connection.update', (update) => {
@@ -108,6 +111,9 @@ async function startSock() {
             connectionState.connected = true;
             connectionState.qrCode = null;
             connectionState.phone = sock.user?.id?.split(':')[0];
+            // Reset error counters on successful connection
+            connectionAttempts = 0;
+            lastError428 = 0;
         }
         
         if (connection === 'close') {
@@ -141,6 +147,28 @@ async function startSock() {
                 setTimeout(() => {
                     startSock();
                 }, 10000); // Wait longer before retrying
+            } else if (statusCode === 428) {
+                console.log('⚠️ Connection terminated by WhatsApp server (428) - anti-spam protection triggered');
+                lastError428 = Date.now();
+                connectionAttempts++;
+                
+                // Clear auth after multiple 428 errors to get fresh session
+                if (connectionAttempts >= 3) {
+                    console.log('🗑️ Too many 428 errors, clearing auth session for fresh start...');
+                    const authPath = path.join(__dirname, 'auth_info');
+                    if (fs.existsSync(authPath)) {
+                        fs.rmSync(authPath, { recursive: true, force: true });
+                        console.log('✅ Auth session cleared, will generate new QR');
+                    }
+                    connectionAttempts = 0; // Reset counter
+                }
+                
+                // Exponential backoff: 1 min, 2 min, 5 min
+                const backoffDelay = Math.min(60000 * Math.pow(2, connectionAttempts - 1), 300000);
+                console.log(`🕐 Waiting ${backoffDelay/1000} seconds before retry (attempt ${connectionAttempts})...`);
+                setTimeout(() => {
+                    startSock();
+                }, backoffDelay);
             } else if (shouldReconnect && statusCode !== 401 && process.env.NODE_ENV !== 'production') {
                 console.log('🔄 Auto-reconnecting in 10 seconds...');
                 setTimeout(() => {
