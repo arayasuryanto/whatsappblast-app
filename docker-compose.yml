@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  whatsapp-blast:
+    build: .
+    container_name: whatsapp-blast-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"  # Change left port if you want different external port
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    volumes:
+      - ./auth_info:/app/auth_info  # Persist WhatsApp session
+      - ./uploads:/app/uploads      # Persist uploaded files
+      - ./data:/app/data           # Persist app data
+    networks:
+      - whatsapp-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  whatsapp-network:
+    driver: bridge
