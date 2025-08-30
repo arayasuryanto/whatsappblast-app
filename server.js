@@ -109,23 +109,21 @@ async function startSock() {
         const { state, saveCreds } = await useMultiFileAuthState('auth_info');
         sock = makeWASocket({
             auth: state,
-            browser: ["WhatsApp Business", "Desktop", "1.0.0"], // Business-like browser ID
-            connectTimeoutMs: 45000, // Shorter to avoid 428 errors
-            defaultQueryTimeoutMs: 45000,
-            keepAliveIntervalMs: 25000, // More frequent keep-alives
             printQRInTerminal: false,
-            qrTimeout: 180000, // 3 minutes QR timeout for cloud
+            browser: ["Chrome", "Linux", "3.0"],
+            logger: require('pino')({ level: 'silent' }),
+            // Conservative connection settings to avoid rate limits
+            connectTimeoutMs: 60000,
+            defaultQueryTimeoutMs: 60000,
+            keepAliveIntervalMs: 30000,
+            qrTimeout: 180000, // 3 minutes is safer
             markOnlineOnConnect: false,
             generateHighQualityLinkPreview: false,
             syncFullHistory: false,
-            // Additional Railway/cloud deployment optimizations
-            retryRequestDelayMs: 2000, // Longer delays to avoid 428
-            maxMsgRetryCount: 1, // Fewer retries to avoid spam detection
-            fireInitQueries: false,
-            getMessage: async () => null,
             downloadHistory: false,
-            shouldSyncHistoryMessage: () => false,
-            emitOwnEvents: false
+            retryRequestDelayMs: 3000,
+            maxMsgRetryCount: 1,
+            getMessage: async (key) => undefined
         });
 
     sock.ev.on('connection.update', (update) => {
@@ -192,7 +190,7 @@ async function startSock() {
                 connectionAttempts++;
                 
                 // Clear auth after multiple 428 errors to get fresh session
-                if (connectionAttempts >= 3) {
+                if (connectionAttempts >= 5) {
                     console.log('🗑️ Too many 428 errors, clearing auth session for fresh start...');
                     const authPath = path.join(__dirname, 'auth_info');
                     if (fs.existsSync(authPath)) {
@@ -202,9 +200,9 @@ async function startSock() {
                     connectionAttempts = 0; // Reset counter
                 }
                 
-                // Exponential backoff: 1 min, 2 min, 5 min
-                const backoffDelay = Math.min(60000 * Math.pow(2, connectionAttempts - 1), 300000);
-                console.log(`🕐 Waiting ${backoffDelay/1000} seconds before retry (attempt ${connectionAttempts})...`);
+                // More conservative exponential backoff: 2 min, 5 min, 10 min, 15 min
+                const backoffDelay = Math.min(120000 * Math.pow(1.5, connectionAttempts - 1), 900000);
+                console.log(`🕐 Waiting ${Math.round(backoffDelay/1000)} seconds before retry (attempt ${connectionAttempts})...`);
                 setTimeout(() => {
                     startSock();
                 }, backoffDelay);
