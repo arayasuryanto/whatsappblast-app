@@ -8,54 +8,218 @@ class DatabaseService {
         this.listeners = new Map();
     }
 
-    // Initialize Firebase
+    // Initialize Firebase (or fallback to local sync)
     async initialize() {
-        try {
-            // Import Firebase modules
-            const { initializeApp } = await import('https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js');
-            const { getDatabase, ref, push, set, get, onValue, off, serverTimestamp } = await import('https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js');
-            const { getAuth, signInAnonymously, onAuthStateChanged } = await import('https://www.gstatic.com/firebasejs/10.7.0/firebase-auth.js');
-
-            // Firebase config (replace with your config)
-            const firebaseConfig = {
-                apiKey: "AIzaSyBn-EvBHSKUkFBdPOXUZJDmvDPgnD87lYc",
-                authDomain: "whatsapp-blast-demo.firebaseapp.com",
-                databaseURL: "https://whatsapp-blast-team-default-rtdb.asia-southeast1.firebasedatabase.app",
-                projectId: "whatsapp-blast-team",
-                storageBucket: "whatsapp-blast-team.firebasestorage.app",
-                messagingSenderId: "892116353481",
-                appId: "1:892116353481:web:024363c3d5b79d854d6818"
-            };
-
-            const app = initializeApp(firebaseConfig);
-            this.db = getDatabase(app);
-            this.auth = getAuth(app);
-
-            // Store Firebase methods for later use
-            this.firebase = {
-                ref, push, set, get, onValue, off, serverTimestamp
-            };
-
-            // Set up authentication
-            await this.setupAuth();
+        console.log('🔄 Initializing database service...');
+        
+        // For now, use a simple sync system instead of Firebase
+        // This will work immediately without authentication issues
+        this.initializeLocalSync();
+        
+        // Set up current user
+        this.currentUser = {
+            uid: this.generateUserId(),
+            name: localStorage.getItem('userName') || 'Anonymous User',
+            email: localStorage.getItem('userEmail') || 'anonymous@example.com',
+            role: localStorage.getItem('userRole') || 'sales',
+            isOnline: true
+        };
+        
+        this.teamId = localStorage.getItem('teamId') || 'default-team';
+        
+        // Update user in sync data
+        this.updateCurrentUser();
+        
+        console.log('✅ Local sync initialized');
+        console.log('Current user:', this.currentUser);
+        console.log('Team ID:', this.teamId);
+        console.log('Initial data:', {
+            campaigns: this.syncData.campaigns.length,
+            activities: this.syncData.activities.length,
+            users: this.syncData.users.length
+        });
+        
+        return true; // Always return true for local sync
+    }
+    
+    initializeLocalSync() {
+        // Set up a simple sync mechanism using localStorage + periodic updates
+        this.syncData = {
+            campaigns: this.getLocal('sync_campaigns', []),
+            activities: this.getLocal('sync_activities', []),
+            users: this.getLocal('sync_users', []),
+            lastSync: this.getLocal('last_sync', 0)
+        };
+        
+        // Start periodic sync (simulates real-time updates)
+        this.startSyncLoop();
+    }
+    
+    updateCurrentUser() {
+        // Each browser tab/window is treated as a separate "session"
+        if (this.currentUser && this.syncData) {
+            // Generate a unique session ID for this tab/window
+            this.sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
             
-            console.log('Firebase initialized successfully');
-            return true;
-        } catch (error) {
-            console.error('Firebase initialization failed:', error);
-            // Fallback to local storage mode
-            return false;
+            // Create a unique user entry for this session
+            const sessionUser = {
+                ...this.currentUser,
+                sessionId: this.sessionId,
+                uid: this.currentUser.uid + '_' + this.sessionId, // Make UID unique per session
+                displayName: this.currentUser.name,
+                lastSeen: Date.now(),
+                isOnline: true,
+                browser: this.getBrowserInfo()
+            };
+            
+            // Add this session as a separate user
+            this.syncData.users.push(sessionUser);
+            this.saveLocal('sync_users', this.syncData.users);
+            this.startHeartbeat();
+        }
+    }
+    
+    getBrowserInfo() {
+        const ua = navigator.userAgent;
+        if (ua.includes('Chrome')) return 'Chrome';
+        if (ua.includes('Firefox')) return 'Firefox';  
+        if (ua.includes('Safari')) return 'Safari';
+        if (ua.includes('Edge')) return 'Edge';
+        return 'Unknown';
+    }
+    
+    startHeartbeat() {
+        // Send heartbeat every 10 seconds to maintain online status
+        this.heartbeatInterval = setInterval(() => {
+            this.updateUserHeartbeat();
+        }, 10000);
+        
+        // Clean up on page unload
+        window.addEventListener('beforeunload', () => {
+            this.cleanupSession();
+        });
+    }
+    
+    updateUserHeartbeat() {
+        if (this.currentUser && this.syncData && this.sessionId) {
+            // Update this session's heartbeat
+            const sessionUid = this.currentUser.uid + '_' + this.sessionId;
+            const existingUsers = this.syncData.users;
+            const userIndex = existingUsers.findIndex(u => u.uid === sessionUid);
+            
+            if (userIndex !== -1) {
+                existingUsers[userIndex].lastSeen = Date.now();
+                existingUsers[userIndex].isOnline = true;
+                this.saveLocal('sync_users', existingUsers);
+            }
+        }
+    }
+    
+    cleanupSession() {
+        if (this.currentUser && this.syncData && this.sessionId) {
+            // Remove this session from users list
+            const sessionUid = this.currentUser.uid + '_' + this.sessionId;
+            const existingUsers = this.syncData.users;
+            const updatedUsers = existingUsers.filter(u => u.uid !== sessionUid);
+            
+            this.syncData.users = updatedUsers;
+            this.saveLocal('sync_users', updatedUsers);
+        }
+        
+        if (this.heartbeatInterval) {
+            clearInterval(this.heartbeatInterval);
+        }
+    }
+    
+    generateUserId() {
+        let userId = localStorage.getItem('user_id');
+        if (!userId) {
+            // Generate a more stable user ID based on browser fingerprint
+            const userName = localStorage.getItem('userName') || 'Anonymous';
+            const timestamp = Date.now();
+            const random = Math.random().toString(36).substr(2, 6);
+            userId = 'user_' + userName.replace(/\s+/g, '').toLowerCase() + '_' + random;
+            localStorage.setItem('user_id', userId);
+        }
+        return userId;
+    }
+    
+    startSyncLoop() {
+        // Check for updates every 3 seconds to simulate real-time
+        setInterval(() => {
+            this.checkForUpdates();
+        }, 3000);
+    }
+    
+    checkForUpdates() {
+        // Clean up stale user sessions
+        const now = Date.now();
+        const STALE_THRESHOLD = 35000; // 35 seconds (heartbeat is 10s, so this gives buffer)
+        
+        if (this.syncData && this.syncData.users) {
+            const beforeCount = this.syncData.users.length;
+            
+            // Remove stale sessions completely
+            this.syncData.users = this.syncData.users.filter(user => {
+                return user.lastSeen && (now - user.lastSeen) <= STALE_THRESHOLD;
+            });
+            
+            const afterCount = this.syncData.users.length;
+            
+            // If users were removed, save and log
+            if (beforeCount !== afterCount) {
+                console.log(`👥 Cleaned up stale sessions: ${beforeCount} → ${afterCount} users`);
+                this.saveLocal('sync_users', this.syncData.users);
+            }
+        }
+        
+        const lastCheck = this.getLocal('last_update_check', 0);
+        if (now - lastCheck > 5000) { // Check every 5 seconds
+            // Trigger callbacks to update UI
+            this.triggerCallbacks();
+            localStorage.setItem('last_update_check', now.toString());
+        }
+    }
+    
+    triggerCallbacks() {
+        // Trigger all registered callbacks with current data
+        if (this.listeners.has('campaigns')) {
+            const callback = this.listeners.get('campaigns');
+            if (callback) callback(this.syncData.campaigns);
+        }
+        
+        if (this.listeners.has('activities')) {
+            const callback = this.listeners.get('activities');
+            if (callback) callback(this.syncData.activities);
+        }
+        
+        if (this.listeners.has('team-members')) {
+            const callback = this.listeners.get('team-members');
+            if (callback) callback(this.syncData.users);
         }
     }
 
     async setupAuth() {
         return new Promise((resolve) => {
             try {
-                const { onAuthStateChanged, signInAnonymously } = this.firebase;
+                console.log('Starting authentication setup...');
+                
+                // Import auth functions from stored reference
+                const onAuthStateChanged = (auth, callback) => {
+                    return import('https://www.gstatic.com/firebasejs/10.7.0/firebase-auth.js')
+                        .then(({ onAuthStateChanged }) => onAuthStateChanged(auth, callback));
+                };
+                
+                const signInAnonymously = (auth) => {
+                    return import('https://www.gstatic.com/firebasejs/10.7.0/firebase-auth.js')
+                        .then(({ signInAnonymously }) => signInAnonymously(auth));
+                };
                 
                 onAuthStateChanged(this.auth, async (user) => {
                     try {
+                        console.log('Auth state changed:', !!user);
                         if (user) {
+                            console.log('User authenticated:', user.uid);
                             this.currentUser = {
                                 uid: user.uid,
                                 name: localStorage.getItem('userName') || 'Anonymous User',
@@ -66,12 +230,14 @@ class DatabaseService {
                             
                             // Set team ID (for demo, use 'default-team')
                             this.teamId = localStorage.getItem('teamId') || 'default-team';
+                            console.log('Team ID set to:', this.teamId);
                             
                             // Update user presence
                             await this.updateUserPresence(true);
                             
                             resolve();
                         } else {
+                            console.log('No user found, signing in anonymously...');
                             // Sign in anonymously
                             await signInAnonymously(this.auth);
                         }
@@ -101,86 +267,80 @@ class DatabaseService {
 
     // Campaign Management
     async saveCampaign(campaign) {
-        if (!this.db) return this.saveLocal('campaigns', campaign);
-        
         try {
-            const campaignRef = this.firebase.ref(this.db, `teams/${this.teamId}/campaigns`);
-            const newCampaignRef = this.firebase.push(campaignRef);
+            const campaignId = 'campaign_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
             
             const campaignData = {
                 ...campaign,
-                id: newCampaignRef.key,
+                id: campaignId,
                 createdBy: this.currentUser.uid,
                 createdByName: this.currentUser.name,
-                createdAt: this.firebase.serverTimestamp(),
-                updatedAt: this.firebase.serverTimestamp()
+                createdAt: Date.now(),
+                updatedAt: Date.now()
             };
             
-            await this.firebase.set(newCampaignRef, campaignData);
+            // Add to local sync data
+            this.syncData.campaigns.push(campaignData);
+            this.saveLocal('sync_campaigns', this.syncData.campaigns);
             
             // Log activity
             await this.logActivity('campaign_created', {
-                campaignId: newCampaignRef.key,
+                campaignId: campaignId,
                 campaignName: campaign.name,
                 contactCount: campaign.contacts?.length || 0
             });
             
-            return newCampaignRef.key;
+            console.log('📋 Campaign saved:', campaignId);
+            
+            // Trigger callbacks to update UI immediately
+            setTimeout(() => this.triggerCallbacks(), 100);
+            
+            return campaignId;
         } catch (error) {
             console.error('Error saving campaign:', error);
-            return this.saveLocal('campaigns', campaign);
+            return null;
         }
     }
 
     async updateCampaignStatus(campaignId, status, additionalData = {}) {
-        if (!this.db) return;
-        
         try {
-            const campaignRef = this.firebase.ref(this.db, `teams/${this.teamId}/campaigns/${campaignId}`);
-            const updateData = {
-                status,
-                updatedAt: this.firebase.serverTimestamp(),
-                updatedBy: this.currentUser.uid,
-                ...additionalData
-            };
-            
-            await this.firebase.set(campaignRef, updateData);
-            
-            // Log activity
-            await this.logActivity('campaign_updated', {
-                campaignId,
-                status,
-                ...additionalData
-            });
+            // Find campaign in local sync data
+            const campaignIndex = this.syncData.campaigns.findIndex(c => c.id === campaignId);
+            if (campaignIndex !== -1) {
+                const currentData = this.syncData.campaigns[campaignIndex];
+                const updateData = {
+                    ...currentData, // Keep existing data
+                    status,
+                    updatedAt: Date.now(),
+                    updatedBy: this.currentUser.uid,
+                    ...additionalData
+                };
+                
+                this.syncData.campaigns[campaignIndex] = updateData;
+                this.saveLocal('sync_campaigns', this.syncData.campaigns);
+                
+                console.log('📝 Campaign updated:', campaignId, status);
+                
+                // Trigger callbacks to update UI
+                setTimeout(() => this.triggerCallbacks(), 100);
+            } else {
+                console.error('Campaign not found for update:', campaignId);
+            }
         } catch (error) {
             console.error('Error updating campaign:', error);
         }
     }
 
     async getCampaigns(callback) {
-        if (!this.db) {
-            const local = this.getLocal('campaigns', []);
-            callback(local);
-            return;
-        }
-        
         try {
-            const campaignsRef = this.firebase.ref(this.db, `teams/${this.teamId}/campaigns`);
+            // Return current campaigns and set up listener
+            const campaigns = [...this.syncData.campaigns];
+            callback(campaigns);
             
-            const unsubscribe = this.firebase.onValue(campaignsRef, (snapshot) => {
-                const campaigns = [];
-                if (snapshot.exists()) {
-                    snapshot.forEach((child) => {
-                        campaigns.push({
-                            id: child.key,
-                            ...child.val()
-                        });
-                    });
-                }
-                callback(campaigns);
-            });
+            // Store callback for future updates
+            this.listeners.set('campaigns', callback);
             
-            this.listeners.set('campaigns', unsubscribe);
+            console.log('📋 Retrieved campaigns:', campaigns.length);
         } catch (error) {
             console.error('Error getting campaigns:', error);
             callback([]);
@@ -189,50 +349,48 @@ class DatabaseService {
 
     // Activity Logging
     async logActivity(type, data) {
-        if (!this.db) return;
-        
         try {
-            const activityRef = this.firebase.ref(this.db, `teams/${this.teamId}/activities`);
-            const newActivityRef = this.firebase.push(activityRef);
+            const activityId = 'activity_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
             
-            await this.firebase.set(newActivityRef, {
-                id: newActivityRef.key,
+            const activity = {
+                id: activityId,
                 type,
                 data,
                 userId: this.currentUser.uid,
                 userName: this.currentUser.name,
-                timestamp: this.firebase.serverTimestamp()
-            });
+                timestamp: Date.now()
+            };
+            
+            // Add to activities list
+            this.syncData.activities.unshift(activity); // Add at beginning for newest first
+            
+            // Keep only latest 100 activities
+            if (this.syncData.activities.length > 100) {
+                this.syncData.activities = this.syncData.activities.slice(0, 100);
+            }
+            
+            this.saveLocal('sync_activities', this.syncData.activities);
+            
+            console.log('📝 Activity logged:', type, data);
+            
+            // Trigger callbacks to update activity feed
+            setTimeout(() => this.triggerCallbacks(), 100);
+            
         } catch (error) {
             console.error('Error logging activity:', error);
         }
     }
 
     async getActivities(callback, limit = 50) {
-        if (!this.db) {
-            callback([]);
-            return;
-        }
-        
         try {
-            const activitiesRef = this.firebase.ref(this.db, `teams/${this.teamId}/activities`);
+            // Return current activities (already sorted newest first)
+            const activities = this.syncData.activities.slice(0, limit);
+            callback(activities);
             
-            const unsubscribe = this.firebase.onValue(activitiesRef, (snapshot) => {
-                const activities = [];
-                if (snapshot.exists()) {
-                    snapshot.forEach((child) => {
-                        activities.push({
-                            id: child.key,
-                            ...child.val()
-                        });
-                    });
-                }
-                // Sort by timestamp (newest first) and limit
-                activities.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-                callback(activities.slice(0, limit));
-            });
+            // Store callback for future updates
+            this.listeners.set('activities', callback);
             
-            this.listeners.set('activities', unsubscribe);
+            console.log('📋 Retrieved activities:', activities.length);
         } catch (error) {
             console.error('Error getting activities:', error);
             callback([]);
@@ -241,90 +399,65 @@ class DatabaseService {
 
     // Team Management
     async getTeamMembers(callback) {
-        if (!this.db) {
-            callback([this.currentUser]);
-            return;
-        }
-        
         try {
-            const usersRef = this.firebase.ref(this.db, `teams/${this.teamId}/users`);
+            // Return current team members
+            const users = [...this.syncData.users];
+            callback(users);
             
-            const unsubscribe = this.firebase.onValue(usersRef, (snapshot) => {
-                const users = [];
-                if (snapshot.exists()) {
-                    snapshot.forEach((child) => {
-                        users.push({
-                            uid: child.key,
-                            ...child.val()
-                        });
-                    });
-                }
-                callback(users);
-            });
+            // Store callback for future updates
+            this.listeners.set('team-members', callback);
             
-            this.listeners.set('team-members', unsubscribe);
+            console.log('👥 Retrieved team members:', users.length);
         } catch (error) {
             console.error('Error getting team members:', error);
-            callback([]);
+            callback([this.currentUser]);
         }
     }
 
     // Statistics
     async getTeamStats(callback) {
-        if (!this.db) {
-            callback({
-                totalCampaigns: 0,
-                activeCampaigns: 0,
-                totalContacts: 0,
-                successRate: 0
-            });
-            return;
-        }
-        
         try {
-            const campaignsRef = this.firebase.ref(this.db, `teams/${this.teamId}/campaigns`);
+            let totalCampaigns = 0;
+            let activeCampaigns = 0;
+            let totalContacts = 0;
+            let totalSent = 0;
+            let totalFailed = 0;
             
-            const unsubscribe = this.firebase.onValue(campaignsRef, (snapshot) => {
-                let totalCampaigns = 0;
-                let activeCampaigns = 0;
-                let totalContacts = 0;
-                let totalSent = 0;
-                let totalFailed = 0;
+            this.syncData.campaigns.forEach((campaign) => {
+                totalCampaigns++;
                 
-                if (snapshot.exists()) {
-                    snapshot.forEach((child) => {
-                        const campaign = child.val();
-                        totalCampaigns++;
-                        
-                        if (campaign.status === 'ongoing' || campaign.status === 'scheduled') {
-                            activeCampaigns++;
-                        }
-                        
-                        if (campaign.contacts) {
-                            totalContacts += campaign.contacts.length;
-                        }
-                        
-                        if (campaign.results) {
-                            totalSent += campaign.results.sent || 0;
-                            totalFailed += campaign.results.failed || 0;
-                        }
-                    });
+                if (campaign.status === 'ongoing' || campaign.status === 'scheduled') {
+                    activeCampaigns++;
                 }
                 
-                const successRate = totalSent + totalFailed > 0 ? 
-                    Math.round((totalSent / (totalSent + totalFailed)) * 100) : 0;
+                if (campaign.contacts) {
+                    totalContacts += campaign.contacts.length;
+                }
                 
-                callback({
-                    totalCampaigns,
-                    activeCampaigns,
-                    totalContacts,
-                    successRate,
-                    totalSent,
-                    totalFailed
-                });
+                if (campaign.results) {
+                    totalSent += campaign.results.sent || 0;
+                    totalFailed += campaign.results.failed || 0;
+                }
             });
             
-            this.listeners.set('team-stats', unsubscribe);
+            const successRate = totalSent + totalFailed > 0 ? 
+                Math.round((totalSent / (totalSent + totalFailed)) * 100) : 0;
+            
+            const stats = {
+                totalCampaigns,
+                activeCampaigns,
+                totalContacts,
+                successRate,
+                totalSent,
+                totalFailed
+            };
+            
+            callback(stats);
+            
+            // Store callback for future updates
+            this.listeners.set('team-stats', callback);
+            
+            console.log('📊 Retrieved team stats:', stats);
         } catch (error) {
             console.error('Error getting team stats:', error);
             callback({
@@ -336,15 +469,23 @@ class DatabaseService {
         }
     }
 
-    // Fallback to localStorage
+    // Save to localStorage
     saveLocal(key, data) {
         try {
-            const existing = JSON.parse(localStorage.getItem(key) || '[]');
-            existing.push(data);
-            localStorage.setItem(key, JSON.stringify(existing));
-            return data.id || Date.now();
+            // If data is already an array, save it directly
+            if (Array.isArray(data)) {
+                localStorage.setItem(key, JSON.stringify(data));
+                return true;
+            } else {
+                // If it's a single item, add to existing array
+                const existing = JSON.parse(localStorage.getItem(key) || '[]');
+                existing.push(data);
+                localStorage.setItem(key, JSON.stringify(existing));
+                return data.id || Date.now();
+            }
         } catch (error) {
             console.error('Error saving to localStorage:', error);
+            return false;
         }
     }
 

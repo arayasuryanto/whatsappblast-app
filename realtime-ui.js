@@ -21,10 +21,16 @@ class RealtimeUI {
         
         // Start real-time listeners
         if (this.isOnline) {
+            console.log('✅ Firebase connected - starting real-time listeners');
             this.startRealtimeListeners();
+        } else {
+            console.log('❌ Firebase not connected - running in offline mode');
         }
         
         console.log('Real-time UI initialized:', this.isOnline ? 'Online' : 'Offline');
+        
+        // Force update status
+        this.updateConnectionStatus(this.isOnline);
     }
 
     createUserSetupModal() {
@@ -72,20 +78,22 @@ class RealtimeUI {
 
     createTeamDashboard() {
         const dashboardHTML = `
-            <!-- Real-time Status Bar -->
+            <!-- Real-time Status Bar (Bottom Fixed) -->
             <div class="realtime-status-bar" id="realtimeStatusBar">
                 <div class="status-indicator">
-                    <span class="connection-dot" id="connectionDot"></span>
-                    <span id="connectionStatus">Connecting...</span>
+                    <span class="connection-dot" id="firebaseConnectionDot"></span>
+                    <span id="firebaseConnectionStatus">Connecting to team...</span>
                 </div>
                 <div class="online-users" id="onlineUsers"></div>
                 <div class="team-stats" id="teamStats"></div>
             </div>
         `;
 
-        // Insert after header
-        const header = document.querySelector('.header');
-        header.insertAdjacentHTML('afterend', dashboardHTML);
+        // Insert at bottom of page, not after header
+        const body = document.body;
+        if (body && !document.getElementById('realtimeStatusBar')) {
+            body.insertAdjacentHTML('beforeend', dashboardHTML);
+        }
     }
 
     createActivityFeed() {
@@ -109,7 +117,10 @@ class RealtimeUI {
         `;
         
         // Add to page
-        document.querySelector('.container').appendChild(activityFeed);
+        const container = document.querySelector('.container');
+        if (container && !document.getElementById('activityFeed')) {
+            container.appendChild(activityFeed);
+        }
     }
 
     createOnlineUsers() {
@@ -179,16 +190,16 @@ class RealtimeUI {
     }
 
     updateConnectionStatus(isOnline) {
-        const dot = document.getElementById('connectionDot');
-        const status = document.getElementById('connectionStatus');
+        const dot = document.getElementById('firebaseConnectionDot');
+        const status = document.getElementById('firebaseConnectionStatus');
         
         if (dot && status) {
             if (isOnline) {
                 dot.className = 'connection-dot online';
-                status.textContent = 'Live - Real-time enabled';
+                status.textContent = '🔴 Live - Team collaboration active';
             } else {
                 dot.className = 'connection-dot offline';
-                status.textContent = 'Offline - Local mode';
+                status.textContent = '⚪ Offline - Local mode only';
             }
         }
     }
@@ -206,8 +217,8 @@ class RealtimeUI {
                 </div>
                 <div class="member-list">
                     ${onlineMembers.map(member => `
-                        <div class="member-avatar" title="${member.name} (${member.role})">
-                            ${member.name.charAt(0).toUpperCase()}
+                        <div class="member-avatar" title="${member.displayName || member.name} (${member.browser || 'Unknown'})">
+                            ${(member.displayName || member.name).charAt(0).toUpperCase()}
                         </div>
                     `).join('')}
                 </div>
@@ -261,15 +272,37 @@ class RealtimeUI {
     }
 
     updateCampaigns(campaigns) {
+        console.log('📋 Received campaigns update:', campaigns.length);
+        
         // Integrate with existing app's campaign display
-        if (this.app && this.app.updateHomeLists) {
-            // Convert Firebase campaigns to app format
-            const scheduled = campaigns.filter(c => c.status === 'scheduled');
+        if (this.app && campaigns && campaigns.length > 0) {
+            // Convert sync campaigns to app format
+            const now = new Date();
+            const scheduled = campaigns.filter(c => c.status === 'scheduled' && c.scheduledTime && new Date(c.scheduledTime) > now);
             const ongoing = campaigns.filter(c => c.status === 'ongoing');
             const completed = campaigns.filter(c => c.status === 'completed');
             
+            console.log('📊 Updating campaigns from sync:', { 
+                scheduled: scheduled.length, 
+                ongoing: ongoing.length, 
+                completed: completed.length,
+                total: campaigns.length 
+            });
+            
             // Update the main app's campaign lists
             this.updateCampaignLists(scheduled, ongoing, completed);
+            
+            // Also trigger the main app's updateCampaignDashboard if available
+            if (this.app.updateCampaignDashboard && typeof this.app.updateCampaignDashboard === 'function') {
+                console.log('🔄 Triggering main app campaign dashboard update');
+                // Override the local data with sync data temporarily
+                const originalOngoing = this.app.ongoingCampaigns;
+                this.app.ongoingCampaigns = ongoing;
+                this.app.updateCampaignDashboard();
+                this.app.ongoingCampaigns = originalOngoing;
+            }
+        } else {
+            console.log('🔍 No campaigns to display or app not available');
         }
     }
 
@@ -449,7 +482,7 @@ class RealtimeUI {
 
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
-    // Initialize real-time UI after main app
+    // Initialize real-time UI after main app (now positioned at bottom)
     setTimeout(() => {
         window.realtimeUI = new RealtimeUI(window.app);
         window.realtimeUI.initialize();

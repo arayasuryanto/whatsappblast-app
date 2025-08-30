@@ -55,16 +55,22 @@ async function startSock() {
         const { state, saveCreds } = await useMultiFileAuthState('auth_info');
         sock = makeWASocket({
             auth: state,
-            browser: ["Windows", "Chrome", "112.0.0.0"],
-            connectTimeoutMs: 120000, // Increased to 2 minutes
-            defaultQueryTimeoutMs: 0,
-            keepAliveIntervalMs: 10000,
+            browser: ["Chrome", "Linux"], // Revert to stable browser ID
+            connectTimeoutMs: 60000, // Longer connection timeout
+            defaultQueryTimeoutMs: 60000,
+            keepAliveIntervalMs: 30000,
             printQRInTerminal: false,
-            qrTimeout: 60000, // QR timeout 60 seconds
-            markOnlineOnConnect: false, // Don't mark online immediately
-            generateHighQualityLinkPreview: false, // Reduce memory usage
+            qrTimeout: 120000, // 2 minutes QR timeout
+            markOnlineOnConnect: false,
+            generateHighQualityLinkPreview: false,
             syncFullHistory: false,
-            getMessage: async () => null // Reduce memory usage
+            getMessage: async () => null,
+            retryRequestDelayMs: 10000, // Even longer retry delay
+            maxMsgRetryCount: 2, // Fewer retries
+            downloadHistory: false,
+            shouldSyncHistoryMessage: () => false,
+            emitOwnEvents: false,
+            fireInitQueries: false // Don't fire initial queries
         });
 
     sock.ev.on('connection.update', (update) => {
@@ -111,18 +117,28 @@ async function startSock() {
                 }
             }
             
-            // In production, be more conservative with reconnections
-            if (shouldReconnect && statusCode !== 401 && process.env.NODE_ENV !== 'production') {
-                console.log('🔄 Auto-reconnecting in 5 seconds...');
+            // Handle specific error codes differently
+            if (statusCode === 405) {
+                console.log('⚠️ Connection failure (405) - clearing auth and restarting...');
+                const authPath = path.join(__dirname, 'auth_info');
+                if (fs.existsSync(authPath)) {
+                    fs.rmSync(authPath, { recursive: true, force: true });
+                    console.log('🗑️ Auth session cleared due to 405 error');
+                }
                 setTimeout(() => {
                     startSock();
-                }, 5000);
+                }, 10000); // Wait longer before retrying
+            } else if (shouldReconnect && statusCode !== 401 && process.env.NODE_ENV !== 'production') {
+                console.log('🔄 Auto-reconnecting in 10 seconds...');
+                setTimeout(() => {
+                    startSock();
+                }, 10000);
             } else if (statusCode === 401 && process.env.NODE_ENV !== 'production') {
                 // For auth errors, restart with fresh session
                 console.log('🔄 Starting fresh connection after auth failure...');
                 setTimeout(() => {
                     startSock();
-                }, 3000);
+                }, 5000);
             } else if (process.env.NODE_ENV === 'production') {
                 console.log('🔄 Connection will restart when needed (production mode)');
                 // Reset sock to allow lazy loading

@@ -8,8 +8,10 @@ class WhatsAppBlastApp {
         this.sendingResults = [];
         this.broadcastHistory = [];
         this.scheduledCampaigns = [];
+        this.ongoingCampaigns = [];
         this.isSending = false;
         this.stopSending = false;
+        this.currentCampaignId = null;
         this.wakeLock = null;
         this.isPageVisible = true;
         
@@ -21,6 +23,7 @@ class WhatsAppBlastApp {
         try {
             this.loadBroadcastHistory();
             this.loadScheduledCampaigns();
+            this.loadOngoingCampaigns();
             this.setupEventListeners();
             this.updateStepIndicator();
             // Start with home page visible
@@ -1186,25 +1189,33 @@ class WhatsAppBlastApp {
         this.sendingResults = [];
         
         // Create campaign data for real-time sync
+        const campaignId = Date.now().toString();
+        this.currentCampaignId = campaignId;
+        
         const campaignData = {
+            id: campaignId,
             name: document.getElementById('projectName').value || 'Unnamed Campaign',
             contacts: this.contacts,
             message: this.messageContent,
             image: this.messageImage,
             status: 'ongoing',
             progress: 0,
-            results: { sent: 0, failed: 0, total: total }
+            results: { sent: 0, failed: 0, total: total },
+            startedAt: Date.now()
         };
         
-        // Save to real-time database
-        let campaignId = null;
-        if (window.realtimeUI) {
-            campaignId = await window.realtimeUI.saveCampaign(campaignData);
-            await window.realtimeUI.logActivity('campaign_started', {
-                campaignId,
-                campaignName: campaignData.name,
-                contactCount: total
-            });
+        // Save to ongoing campaigns immediately
+        this.ongoingCampaigns.push(campaignData);
+        this.saveOngoingCampaigns();
+        
+        // Save to real-time database (now using local sync)
+        let realtimeCampaignId = null;
+        if (window.databaseService) {
+            console.log('Saving campaign to sync system...');
+            realtimeCampaignId = await window.databaseService.saveCampaign(campaignData);
+            console.log('Campaign saved to sync system with ID:', realtimeCampaignId);
+        } else {
+            console.log('Database service not available');
         }
         
         progressText.textContent = `${sent} / ${total} sent`;
@@ -1342,12 +1353,24 @@ class WhatsAppBlastApp {
             progressText.textContent = this.stopSending ? `Stopped: ${sent} sent, ${failed} failed` : `${processed} / ${total} sent`;
             progressPercent.textContent = Math.round(progress) + '%';
             
+            // Update local ongoing campaign
+            const ongoingCampaign = this.ongoingCampaigns.find(c => c.id === campaignId);
+            if (ongoingCampaign) {
+                ongoingCampaign.progress = Math.round(progress);
+                ongoingCampaign.results = { sent, failed, total };
+                this.saveOngoingCampaigns();
+            }
+            
             // Update real-time progress
-            if (window.realtimeUI && campaignId) {
-                await window.realtimeUI.updateCampaignStatus(campaignId, 'ongoing', {
-                    progress: Math.round(progress),
-                    results: { sent, failed, total }
-                });
+            if (window.databaseService && realtimeCampaignId) {
+                try {
+                    await window.databaseService.updateCampaignStatus(realtimeCampaignId, 'ongoing', {
+                        progress: Math.round(progress),
+                        results: { sent, failed, total }
+                    });
+                } catch (error) {
+                    console.error('Error updating sync campaign status:', error);
+                }
             }
             
             // Wait random time between messages with custom range
@@ -1417,23 +1440,61 @@ class WhatsAppBlastApp {
         // Update visual indicators
         this.updateWakeLockStatus(false);
         
-        // Update real-time database with completion
-        if (window.realtimeUI && campaignId) {
-            const finalStatus = this.stopSending ? 'stopped' : 'completed';
-            await window.realtimeUI.updateCampaignStatus(campaignId, finalStatus, {
-                progress: 100,
-                results: { sent, failed, total },
-                completedAt: Date.now()
-            });
+        // Move campaign from ongoing to completed
+        const completedCampaignIndex = this.ongoingCampaigns.findIndex(c => c.id === campaignId);
+        if (completedCampaignIndex !== -1) {
+            const completedCampaign = this.ongoingCampaigns[completedCampaignIndex];
+            completedCampaign.status = this.stopSending ? 'stopped' : 'completed';
+            completedCampaign.progress = 100;
+            completedCampaign.results = { sent, failed, total };
+            completedCampaign.completedAt = Date.now();
             
-            await window.realtimeUI.logActivity(finalStatus === 'stopped' ? 'campaign_stopped' : 'campaign_completed', {
-                campaignId,
-                campaignName: campaignData.name,
-                sent,
-                failed,
-                total
-            });
+            // Remove from ongoing
+            this.ongoingCampaigns.splice(completedCampaignIndex, 1);
+            this.saveOngoingCampaigns();
+            
+            // Add to completed history (keeping existing format)
+            const historyEntry = {
+                id: completedCampaign.id,
+                name: completedCampaign.name,
+                date: new Date().toISOString(),
+                message: completedCampaign.message,
+                image: completedCampaign.image ? 'Yes' : 'No',
+                results: completedCampaign.results,
+                contacts: [...this.sendingResults]
+            };
+            
+            this.broadcastHistory.unshift(historyEntry);
+            if (this.broadcastHistory.length > 50) {
+                this.broadcastHistory = this.broadcastHistory.slice(0, 50);
+            }
+            this.saveBroadcastHistory();
         }
+        
+        // Update real-time database with completion
+        if (window.databaseService && realtimeCampaignId) {
+            try {
+                const finalStatus = this.stopSending ? 'stopped' : 'completed';
+                await window.databaseService.updateCampaignStatus(realtimeCampaignId, finalStatus, {
+                    progress: 100,
+                    results: { sent, failed, total },
+                    completedAt: Date.now()
+                });
+                
+                await window.databaseService.logActivity(finalStatus === 'stopped' ? 'campaign_stopped' : 'campaign_completed', {
+                    campaignId: realtimeCampaignId,
+                    campaignName: campaignData.name,
+                    sent,
+                    failed,
+                    total
+                });
+            } catch (error) {
+                console.error('Error updating sync on completion:', error);
+            }
+        }
+        
+        // Reset current campaign ID
+        this.currentCampaignId = null;
         
         // Show notification if page is hidden
         if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
@@ -1495,8 +1556,7 @@ class WhatsAppBlastApp {
             retryAllBtn.style.display = 'none';
         }
         
-        // Save campaign to history
-        this.saveCampaign(sent, failed, total);
+        // Campaign already saved to history in processSending method
         
         this.goToStep(5);
     }
@@ -1634,6 +1694,27 @@ class WhatsAppBlastApp {
             }
         } catch (error) {
             console.error('Error loading scheduled campaigns:', error);
+        }
+    }
+
+    loadOngoingCampaigns() {
+        try {
+            const saved = localStorage.getItem('ongoing_campaigns');
+            if (saved) {
+                this.ongoingCampaigns = JSON.parse(saved);
+                console.log('Loaded ongoing campaigns:', this.ongoingCampaigns);
+            }
+        } catch (error) {
+            console.error('Error loading ongoing campaigns:', error);
+        }
+    }
+
+    saveOngoingCampaigns() {
+        try {
+            localStorage.setItem('ongoing_campaigns', JSON.stringify(this.ongoingCampaigns));
+            console.log('Saved ongoing campaigns:', this.ongoingCampaigns);
+        } catch (error) {
+            console.error('Error saving ongoing campaigns:', error);
         }
     }
 
@@ -1797,6 +1878,14 @@ class WhatsAppBlastApp {
             if (homePage && campaignPage) {
                 homePage.classList.add('active');
                 campaignPage.classList.remove('active');
+                
+                // Refresh sync data before updating dashboard
+                if (window.databaseService && window.databaseService.syncData) {
+                    // Reload sync data from localStorage
+                    window.databaseService.syncData.campaigns = window.databaseService.getLocal('sync_campaigns', []);
+                    console.log('🔄 Refreshed sync data:', window.databaseService.syncData.campaigns.length, 'campaigns');
+                }
+                
                 this.updateCampaignDashboard();
             } else {
                 console.error('Page elements not found');
@@ -1828,11 +1917,44 @@ class WhatsAppBlastApp {
         const ongoingList = document.getElementById('ongoingList');
         const completedList = document.getElementById('completedList');
 
-        // Get current campaigns
+        // If sync system is available, get campaigns from sync data
+        if (window.databaseService && window.databaseService.syncData) {
+            const now = new Date();
+            const syncCampaigns = window.databaseService.syncData.campaigns || [];
+            const scheduledCampaigns = syncCampaigns.filter(c => c.status === 'scheduled' && c.scheduledTime && new Date(c.scheduledTime) > now);
+            const ongoingCampaigns = syncCampaigns.filter(c => c.status === 'ongoing');
+            const completedCampaigns = syncCampaigns.filter(c => c.status === 'completed');
+            
+            console.log('🏠 Dashboard using sync data:', {
+                scheduled: scheduledCampaigns.length,
+                ongoing: ongoingCampaigns.length, 
+                completed: completedCampaigns.length
+            });
+            
+            // Use sync data
+            this.renderDashboardSections(scheduledCampaigns, ongoingCampaigns, completedCampaigns);
+            return;
+        }
+
+        // Fallback to local data when sync not available
         const now = new Date();
         const scheduledCampaigns = this.scheduledCampaigns.filter(c => c.status === 'scheduled' && new Date(c.scheduledTime) > now);
-        const ongoingCampaigns = this.scheduledCampaigns.filter(c => c.status === 'ongoing');
+        const ongoingCampaigns = this.ongoingCampaigns; // Use the dedicated ongoing campaigns array
         const completedCampaigns = this.broadcastHistory;
+        
+        console.log('🏠 Dashboard using local data:', {
+            scheduled: scheduledCampaigns.length,
+            ongoing: ongoingCampaigns.length,
+            completed: completedCampaigns.length
+        });
+        
+        this.renderDashboardSections(scheduledCampaigns, ongoingCampaigns, completedCampaigns);
+    }
+    
+    renderDashboardSections(scheduledCampaigns, ongoingCampaigns, completedCampaigns) {
+        const scheduledList = document.getElementById('scheduledList');
+        const ongoingList = document.getElementById('ongoingList');
+        const completedList = document.getElementById('completedList');
 
         // Update scheduled campaigns
         if (scheduledCampaigns.length === 0) {
@@ -1873,22 +1995,40 @@ class WhatsAppBlastApp {
                 <div class="empty-campaigns">
                     <p>No ongoing campaigns</p>
                     <small>Currently running campaigns will appear here</small>
+                    <button class="btn-secondary btn-small" onclick="window.app.showCampaignPage()">Start Campaign</button>
                 </div>
             `;
         } else {
             ongoingList.innerHTML = ongoingCampaigns.map(campaign => {
+                const progress = campaign.progress || 0;
+                const results = campaign.results || { sent: 0, failed: 0, total: campaign.contacts.length };
+                const startedTime = campaign.startedAt ? new Date(campaign.startedAt).toLocaleTimeString() : 'Unknown';
+                
                 return `
-                    <div class="campaign-item" onclick="app.showScheduledCampaignDetails('${campaign.id}')">
+                    <div class="campaign-item ongoing-campaign" onclick="app.resumeOngoingCampaign('${campaign.id}')">
                         <div class="campaign-item-header">
                             <div class="campaign-item-title">${campaign.name}</div>
-                            <div class="campaign-item-status ongoing">Ongoing</div>
+                            <div class="campaign-item-status ongoing">⏳ Running (${progress}%)</div>
+                        </div>
+                        <div class="campaign-progress">
+                            <div class="progress-bar-mini">
+                                <div class="progress-fill-mini" style="width: ${progress}%"></div>
+                            </div>
                         </div>
                         <div class="campaign-item-meta">
-                            <span>Currently running...</span>
+                            <span>Started at ${startedTime}</span>
                             <div class="campaign-item-stats">
+                                <div class="campaign-stat success">
+                                    <span>✅</span>
+                                    <span>${results.sent}</span>
+                                </div>
+                                <div class="campaign-stat error">
+                                    <span>❌</span>
+                                    <span>${results.failed}</span>
+                                </div>
                                 <div class="campaign-stat total">
                                     <span>👥</span>
-                                    <span>${campaign.contacts.length} contacts</span>
+                                    <span>${results.total}</span>
                                 </div>
                             </div>
                         </div>
@@ -1937,6 +2077,214 @@ class WhatsAppBlastApp {
                 `;
             }).join('');
         }
+    }
+
+    resumeOngoingCampaign(campaignId) {
+        const campaign = this.ongoingCampaigns.find(c => c.id === campaignId);
+        if (!campaign) {
+            console.error('Ongoing campaign not found:', campaignId);
+            return;
+        }
+        
+        console.log('Resuming ongoing campaign:', campaign.name);
+        
+        // Set up the campaign data in the app
+        this.contacts = campaign.contacts || [];
+        this.messageContent = campaign.message || '';
+        this.messageImage = campaign.image || null;
+        this.currentCampaignId = campaign.id;
+        
+        // Fill in project name
+        document.getElementById('projectName').value = campaign.name;
+        
+        // Navigate to the progress step to show the ongoing campaign
+        this.showCampaignPage();
+        this.goToStep(4);
+        
+        // Update the progress display with current state
+        const progress = campaign.progress || 0;
+        const results = campaign.results || { sent: 0, failed: 0, total: campaign.contacts.length };
+        
+        document.getElementById('progressFill').style.width = progress + '%';
+        document.getElementById('progressText').textContent = `${results.sent + results.failed} / ${results.total} sent`;
+        document.getElementById('progressPercent').textContent = progress + '%';
+        
+        // Show "Continue Campaign" button instead of "Stop Campaign"
+        const stopBtn = document.getElementById('stopSending');
+        if (stopBtn) {
+            stopBtn.textContent = 'Continue Sending';
+            stopBtn.style.backgroundColor = '#25d366';
+            stopBtn.onclick = () => {
+                // Reset the button and continue sending
+                stopBtn.textContent = 'Stop Campaign';
+                stopBtn.style.backgroundColor = '#f44336';
+                stopBtn.onclick = () => this.stopCampaign();
+                
+                // Continue the sending process where it left off
+                this.continueCampaign(campaign);
+            };
+        }
+    }
+
+    async continueCampaign(campaign) {
+        console.log('Continuing campaign:', campaign.name);
+        
+        // Check WhatsApp connection first
+        if (!this.isConnected) {
+            alert('Please connect to WhatsApp first');
+            await this.checkConnection();
+            return;
+        }
+        
+        // Set up campaign state
+        this.isSending = true;
+        this.stopSending = false;
+        this.currentCampaignId = campaign.id;
+        
+        // Continue from where we left off
+        const results = campaign.results || { sent: 0, failed: 0, total: campaign.contacts.length };
+        const startIndex = results.sent + results.failed; // Continue from this index
+        
+        // Set up remaining contacts
+        const remainingContacts = campaign.contacts.slice(startIndex);
+        
+        if (remainingContacts.length === 0) {
+            alert('Campaign is already complete!');
+            return;
+        }
+        
+        // Request wake lock to keep page active
+        await this.requestWakeLock();
+        
+        // Continue processing
+        await this.processSendingContinuation(campaign, startIndex);
+    }
+
+    async processSendingContinuation(campaign, startIndex) {
+        // This is a simplified version of processSending for continuation
+        const progressFill = document.getElementById('progressFill');
+        const progressText = document.getElementById('progressText');
+        const progressPercent = document.getElementById('progressPercent');
+        
+        const results = campaign.results || { sent: 0, failed: 0, total: campaign.contacts.length };
+        let sent = results.sent;
+        let failed = results.failed;
+        const total = campaign.contacts.length;
+        
+        // Continue from where we left off
+        for (let i = startIndex; i < campaign.contacts.length; i++) {
+            if (this.stopSending) {
+                console.log('Campaign continuation stopped by user');
+                break;
+            }
+            
+            const contact = campaign.contacts[i];
+            
+            try {
+                // Send message (same logic as original processSending)
+                let response;
+                
+                if (campaign.image) {
+                    const formData = new FormData();
+                    formData.append('nomor', contact.phone);
+                    formData.append('pesan', campaign.message);
+                    formData.append('nama', contact.name);
+                    formData.append('useHumanBehavior', 'true');
+                    formData.append('image', campaign.image);
+                    
+                    response = await fetch('/send', {
+                        method: 'POST',
+                        body: formData
+                    });
+                } else {
+                    response = await fetch('/send', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            nomor: contact.phone,
+                            pesan: campaign.message,
+                            nama: contact.name,
+                            useHumanBehavior: true
+                        })
+                    });
+                }
+                
+                if (response.ok) {
+                    sent++;
+                } else {
+                    failed++;
+                }
+            } catch (error) {
+                failed++;
+            }
+            
+            // Update progress
+            const processed = sent + failed;
+            const progress = (processed / total) * 100;
+            progressFill.style.width = progress + '%';
+            progressText.textContent = `${processed} / ${total} sent`;
+            progressPercent.textContent = Math.round(progress) + '%';
+            
+            // Update campaign in storage
+            const ongoingCampaign = this.ongoingCampaigns.find(c => c.id === campaign.id);
+            if (ongoingCampaign) {
+                ongoingCampaign.progress = Math.round(progress);
+                ongoingCampaign.results = { sent, failed, total };
+                this.saveOngoingCampaigns();
+            }
+            
+            // Wait between messages
+            if (i < campaign.contacts.length - 1 && !this.stopSending) {
+                const delay = this.getRandomDelay(10000, 60000);
+                console.log(`⏰ Waiting ${Math.round(delay/1000)} seconds...`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
+        }
+        
+        // Handle completion
+        if (!this.stopSending) {
+            // Campaign completed - move to history
+            this.completeCampaign(campaign.id, sent, failed, total);
+        }
+        
+        this.isSending = false;
+        this.currentCampaignId = null;
+    }
+
+    completeCampaign(campaignId, sent, failed, total) {
+        // Move campaign from ongoing to completed (similar to processSending completion logic)
+        const completedCampaignIndex = this.ongoingCampaigns.findIndex(c => c.id === campaignId);
+        if (completedCampaignIndex !== -1) {
+            const completedCampaign = this.ongoingCampaigns[completedCampaignIndex];
+            completedCampaign.status = 'completed';
+            completedCampaign.progress = 100;
+            completedCampaign.results = { sent, failed, total };
+            completedCampaign.completedAt = Date.now();
+            
+            // Remove from ongoing
+            this.ongoingCampaigns.splice(completedCampaignIndex, 1);
+            this.saveOngoingCampaigns();
+            
+            // Add to history
+            const historyEntry = {
+                id: completedCampaign.id,
+                name: completedCampaign.name,
+                date: new Date().toISOString(),
+                message: completedCampaign.message,
+                image: completedCampaign.image ? 'Yes' : 'No',
+                results: { sent, failed, total },
+                contacts: [] // We don't have detailed results for continuation
+            };
+            
+            this.broadcastHistory.unshift(historyEntry);
+            if (this.broadcastHistory.length > 50) {
+                this.broadcastHistory = this.broadcastHistory.slice(0, 50);
+            }
+            this.saveBroadcastHistory();
+        }
+        
+        // Show completion summary
+        this.showSummary(sent, failed, total);
     }
 
     showScheduledCampaignDetails(campaignId) {
