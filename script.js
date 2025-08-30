@@ -36,17 +36,22 @@ class WhatsAppBlastApp {
                 locationHref: window.location.href 
             });
             
-            // For Synology deployments, common patterns are:
-            // - http://nas-ip:port
-            // - https://nas-ip:port  
-            // - Same host/port as the current page
-            
             // Check if we're running on localhost (development)
             if (currentHost === 'localhost' || currentHost === '127.0.0.1') {
                 this.serverUrl = `${currentProtocol}//${currentHost}:3000`;
                 console.log('📍 Development mode detected - using port 3000');
-            } 
-            // For production deployments (Synology, etc.) - always use same host and port
+            }
+            // Check if we're running on Railway deployment (*.railway.app)
+            else if (currentHost.includes('.railway.app')) {
+                this.serverUrl = `${currentProtocol}//${currentHost}`;
+                console.log('📍 Railway deployment detected - using same host');
+            }
+            // Check if we're running on Vercel deployment (*.vercel.app)
+            else if (currentHost.includes('.vercel.app')) {
+                this.serverUrl = `${currentProtocol}//${currentHost}`;
+                console.log('📍 Vercel deployment detected - using same host');
+            }
+            // For other production deployments (Synology, etc.) - use same host and port
             else {
                 // Use exact same protocol, host, and port as current page
                 if (currentPort) {
@@ -499,7 +504,22 @@ class WhatsAppBlastApp {
         try {
             console.log('Checking connection...');
             const serverUrl = this.getServerUrl();
-            const response = await fetch(`${serverUrl}/status`);
+            
+            // Show loading state for Railway/cloud deployments
+            this.updateConnectionStatus(false, null, true);
+            
+            // Add timeout for Railway/cloud deployments that might have cold starts
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+            
+            const response = await fetch(`${serverUrl}/status`, {
+                signal: controller.signal,
+                headers: {
+                    'Cache-Control': 'no-cache'
+                }
+            });
+            clearTimeout(timeoutId);
+            
             const data = await response.json();
             console.log('Connection status:', data);
             this.updateConnectionStatus(data.connected, data.phone);
@@ -538,7 +558,19 @@ class WhatsAppBlastApp {
         try {
             console.log('Checking connection silently...');
             const serverUrl = this.getServerUrl();
-            const response = await fetch(`${serverUrl}/status`);
+            
+            // Add timeout for Railway/cloud deployments
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 15000);
+            
+            const response = await fetch(`${serverUrl}/status`, {
+                signal: controller.signal,
+                headers: {
+                    'Cache-Control': 'no-cache'
+                }
+            });
+            clearTimeout(timeoutId);
+            
             const data = await response.json();
             console.log('Silent connection status:', data);
             this.updateConnectionStatus(data.connected, data.phone);
@@ -551,21 +583,33 @@ class WhatsAppBlastApp {
 
     async pollForQRCode() {
         let attempts = 0;
-        const maxAttempts = 60; // 2 minutes (60 * 2 seconds)
+        const maxAttempts = 120; // 2 minutes (120 * 1 second)
         
         // Clear any existing polls
         if (this.currentPollInterval) {
             clearInterval(this.currentPollInterval);
         }
         
-        // Poll every 2 seconds for QR code when not connected
+        // Poll every 1 second for faster connection detection
         this.currentPollInterval = setInterval(async () => {
             attempts++;
             
             try {
                 console.log(`Polling attempt ${attempts}/${maxAttempts}`);
                 const serverUrl = this.getServerUrl();
-                const response = await fetch(`${serverUrl}/status`);
+                
+                // Add timeout for Railway deployments
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout for polling
+                
+                const response = await fetch(`${serverUrl}/status`, {
+                    signal: controller.signal,
+                    headers: {
+                        'Cache-Control': 'no-cache'
+                    }
+                });
+                clearTimeout(timeoutId);
+                
                 const data = await response.json();
                 console.log('Poll result:', data);
                 
@@ -582,15 +626,19 @@ class WhatsAppBlastApp {
                     this.showQRCode(data.qrImage);
                 } else if (!data.qrImage && !data.connected && attempts > 5) {
                     // Show connecting state if QR was scanned but not yet connected
+                    console.log('🔄 QR scanned detected - starting aggressive polling');
                     const qrContainer = document.getElementById('qrCode');
                     if (!qrContainer.innerHTML.includes('Connecting')) {
                         qrContainer.innerHTML = `
                             <div style="text-align: center; padding: 40px;">
                                 <div style="display: inline-block; width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #25d366; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px;"></div>
-                                <p><strong>Connecting to WhatsApp...</strong></p>
-                                <p><small>QR code was scanned, establishing connection...</small></p>
+                                <p><strong>QR Scanned! Connecting...</strong></p>
+                                <p><small>Please wait while we establish the connection...</small></p>
                             </div>
                         `;
+                        
+                        // Start aggressive polling when QR is scanned
+                        this.startAggressivePolling();
                     }
                 } else if (attempts > 25) {
                     // After 50 seconds with no connection, show error with retry
@@ -609,7 +657,7 @@ class WhatsAppBlastApp {
                 this.currentPollInterval = null;
                 this.showQRCodeTimeout();
             }
-        }, 2000);
+        }, 1000); // Reduced from 2000ms to 1000ms for faster polling
     }
 
     showQRCodeError() {
@@ -730,7 +778,7 @@ class WhatsAppBlastApp {
         }
     }
 
-    updateConnectionStatus(connected, phone = null) {
+    updateConnectionStatus(connected, phone = null, loading = false) {
         const statusElement = document.getElementById('connectionStatus');
         const homeStatusElement = document.getElementById('homeConnectionStatus');
         const logoutDropdown = document.getElementById('logoutDropdown');
@@ -742,7 +790,11 @@ class WhatsAppBlastApp {
             const dot = statusElement.querySelector('.status-dot');
             const text = statusElement.querySelector('.status-text');
             
-            if (connected) {
+            if (loading) {
+                dot.className = 'status-dot checking';
+                text.textContent = 'Checking connection...';
+                statusElement.classList.remove('connected');
+            } else if (connected) {
                 dot.className = 'status-dot connected';
                 text.textContent = phone ? `Connected as ${phone}` : 'Connected';
                 statusElement.classList.add('connected');
