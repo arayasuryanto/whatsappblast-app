@@ -14,8 +14,56 @@ class WhatsAppBlastApp {
         this.currentCampaignId = null;
         this.wakeLock = null;
         this.isPageVisible = true;
+        this.serverUrl = null; // Cache server URL
         
         this.init();
+    }
+
+    // Detect the correct server URL for deployment flexibility
+    getServerUrl() {
+        if (this.serverUrl) return this.serverUrl;
+        
+        try {
+            // Try to detect server URL based on current location
+            const currentHost = window.location.hostname;
+            const currentProtocol = window.location.protocol;
+            
+            console.log('🌐 Detecting server URL...', { currentHost, currentProtocol, currentPort: window.location.port });
+            
+            // Check if we're running on localhost (development)
+            if (currentHost === 'localhost' || currentHost === '127.0.0.1') {
+                this.serverUrl = `${currentProtocol}//${currentHost}:3000`;
+                console.log('📍 Development mode detected - using port 3000');
+            } 
+            // For production deployments (Synology, etc.)
+            else {
+                const currentPort = window.location.port;
+                // If there's a port in current URL, use it; otherwise assume standard ports
+                if (currentPort && currentPort !== '80' && currentPort !== '443') {
+                    this.serverUrl = `${currentProtocol}//${currentHost}:${currentPort}`;
+                    console.log('📍 Production mode with custom port:', currentPort);
+                } else {
+                    // For standard ports, try common Node.js ports first
+                    if (currentProtocol === 'https:') {
+                        this.serverUrl = `${currentProtocol}//${currentHost}`;
+                        console.log('📍 Production HTTPS mode - using standard port');
+                    } else {
+                        // For HTTP, still try to use same port as current page
+                        this.serverUrl = `${currentProtocol}//${currentHost}${currentPort ? ':' + currentPort : ''}`;
+                        console.log('📍 Production HTTP mode');
+                    }
+                }
+            }
+            
+            console.log('✅ Server URL detected:', this.serverUrl);
+            return this.serverUrl;
+            
+        } catch (error) {
+            console.error('❌ Error detecting server URL:', error);
+            // Fallback to relative URLs if detection fails
+            this.serverUrl = '';
+            return this.serverUrl;
+        }
     }
 
     init() {
@@ -28,8 +76,12 @@ class WhatsAppBlastApp {
             this.updateStepIndicator();
             // Start with home page visible
             this.showHomePage();
-            // Check connection but don't auto-show QR on page load
-            this.checkConnectionSilent();
+            
+            // Test server connectivity first
+            this.testServerConnectivity().then(() => {
+                // Check connection but don't auto-show QR on page load
+                this.checkConnectionSilent();
+            });
             
             // Start scheduled campaign checker
             this.startScheduledChecker();
@@ -40,6 +92,36 @@ class WhatsAppBlastApp {
             console.log('App initialized successfully');
         } catch (error) {
             console.error('Initialization error:', error);
+        }
+    }
+
+    // Test server connectivity on startup
+    async testServerConnectivity() {
+        const serverUrl = this.getServerUrl();
+        console.log('🔍 Testing server connectivity at:', serverUrl);
+        
+        try {
+            const response = await fetch(`${serverUrl}/health`, {
+                method: 'GET',
+                timeout: 5000 // 5 second timeout
+            });
+            
+            if (response.ok) {
+                const health = await response.json();
+                console.log('✅ Server connectivity test successful:', health);
+                return true;
+            } else {
+                console.warn('⚠️ Server responded but not OK:', response.status);
+                return false;
+            }
+        } catch (error) {
+            console.error('❌ Server connectivity test failed:', error);
+            console.error('🔧 This might be due to:');
+            console.error('   - Server not running on expected URL');
+            console.error('   - CORS issues');  
+            console.error('   - Network connectivity problems');
+            console.error('   - Firewall blocking requests');
+            return false;
         }
     }
 
@@ -386,7 +468,8 @@ class WhatsAppBlastApp {
     async checkConnection() {
         try {
             console.log('Checking connection...');
-            const response = await fetch('/status');
+            const serverUrl = this.getServerUrl();
+            const response = await fetch(`${serverUrl}/status`);
             const data = await response.json();
             console.log('Connection status:', data);
             this.updateConnectionStatus(data.connected, data.phone);
@@ -424,7 +507,8 @@ class WhatsAppBlastApp {
     async checkConnectionSilent() {
         try {
             console.log('Checking connection silently...');
-            const response = await fetch('/status');
+            const serverUrl = this.getServerUrl();
+            const response = await fetch(`${serverUrl}/status`);
             const data = await response.json();
             console.log('Silent connection status:', data);
             this.updateConnectionStatus(data.connected, data.phone);
@@ -450,7 +534,8 @@ class WhatsAppBlastApp {
             
             try {
                 console.log(`Polling attempt ${attempts}/${maxAttempts}`);
-                const response = await fetch('/status');
+                const serverUrl = this.getServerUrl();
+                const response = await fetch(`${serverUrl}/status`);
                 const data = await response.json();
                 console.log('Poll result:', data);
                 
@@ -546,7 +631,8 @@ class WhatsAppBlastApp {
         
         try {
             // Force reconnect on server
-            const response = await fetch('/reconnect', {
+            const serverUrl = this.getServerUrl();
+            const response = await fetch(`${serverUrl}/reconnect`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -583,7 +669,8 @@ class WhatsAppBlastApp {
                 this.currentPollInterval = null;
             }
             
-            const response = await fetch('/logout', {
+            const serverUrl = this.getServerUrl();
+            const response = await fetch(`${serverUrl}/logout`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -1279,6 +1366,7 @@ class WhatsAppBlastApp {
                 let response;
                 
                 // Include image if available
+                const serverUrl = this.getServerUrl();
                 if (this.messageImage) {
                     const formData = new FormData();
                     formData.append('nomor', contact.phone);
@@ -1287,12 +1375,12 @@ class WhatsAppBlastApp {
                     formData.append('useHumanBehavior', 'true');
                     formData.append('image', this.messageImage);
                     
-                    response = await fetch('/send', {
+                    response = await fetch(`${serverUrl}/send`, {
                         method: 'POST',
                         body: formData
                     });
                 } else {
-                    response = await fetch('/send', {
+                    response = await fetch(`${serverUrl}/send`, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -2184,6 +2272,7 @@ class WhatsAppBlastApp {
             try {
                 // Send message (same logic as original processSending)
                 let response;
+                const serverUrl = this.getServerUrl();
                 
                 if (campaign.image) {
                     const formData = new FormData();
@@ -2193,12 +2282,12 @@ class WhatsAppBlastApp {
                     formData.append('useHumanBehavior', 'true');
                     formData.append('image', campaign.image);
                     
-                    response = await fetch('/send', {
+                    response = await fetch(`${serverUrl}/send`, {
                         method: 'POST',
                         body: formData
                     });
                 } else {
-                    response = await fetch('/send', {
+                    response = await fetch(`${serverUrl}/send`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
