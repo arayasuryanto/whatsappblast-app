@@ -620,12 +620,26 @@ class WhatsAppBlastApp {
                     this.updateConnectionStatus(true, data.phone);
                     document.getElementById('qrModal').classList.remove('active');
                     return;
+                } else if (data.server === 'test-mode') {
+                    // Test server detected - show appropriate message
+                    console.log('🧪 Test server detected, showing test mode message');
+                    const qrContainer = document.getElementById('qrCode');
+                    if (!qrContainer.innerHTML.includes('Test Server')) {
+                        qrContainer.innerHTML = `
+                            <div style="text-align: center; padding: 40px;">
+                                <div style="font-size: 48px; margin-bottom: 20px;">🧪</div>
+                                <p><strong>Test Server Mode</strong></p>
+                                <p><small>This is a minimal test server without WhatsApp functionality.</small></p>
+                                <p><small>Please deploy the full server for WhatsApp features.</small></p>
+                            </div>
+                        `;
+                    }
                 } else if (data.qrImage && !data.connected) {
                     // QR code is ready, show it
                     console.log('QR code received, updating modal');
                     this.showQRCode(data.qrImage);
-                } else if (!data.qrImage && !data.connected && attempts > 5) {
-                    // Show connecting state if QR was scanned but not yet connected
+                } else if (!data.qrImage && !data.connected && attempts > 5 && data.server !== 'test-mode') {
+                    // Show connecting state if QR was scanned but not yet connected (ignore test server)
                     console.log('🔄 QR scanned detected - starting aggressive polling');
                     const qrContainer = document.getElementById('qrCode');
                     if (!qrContainer.innerHTML.includes('Connecting')) {

@@ -4,7 +4,7 @@
     "builder": "NIXPACKS"
   },
   "deploy": {
-    "startCommand": "node server-test.js",
+    "startCommand": "node server.js",
     "restartPolicyType": "NEVER"
   }
 }
