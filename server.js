@@ -59,6 +59,45 @@ let connectionState = {
 let connectionAttempts = 0;
 let lastError428 = 0;
 
+// Campaign storage
+const CAMPAIGNS_FILE = path.join(__dirname, 'campaigns.json');
+let campaigns = {
+    ongoing: [],
+    completed: [],
+    scheduled: []
+};
+
+// Load campaigns from file
+function loadCampaigns() {
+    try {
+        if (fs.existsSync(CAMPAIGNS_FILE)) {
+            const data = fs.readFileSync(CAMPAIGNS_FILE, 'utf8');
+            campaigns = JSON.parse(data);
+            console.log('📁 Loaded campaigns from file:', {
+                ongoing: campaigns.ongoing.length,
+                completed: campaigns.completed.length,
+                scheduled: campaigns.scheduled.length
+            });
+        }
+    } catch (error) {
+        console.error('❌ Error loading campaigns:', error);
+        campaigns = { ongoing: [], completed: [], scheduled: [] };
+    }
+}
+
+// Save campaigns to file
+function saveCampaigns() {
+    try {
+        fs.writeFileSync(CAMPAIGNS_FILE, JSON.stringify(campaigns, null, 2));
+        console.log('💾 Campaigns saved to file');
+    } catch (error) {
+        console.error('❌ Error saving campaigns:', error);
+    }
+}
+
+// Initialize campaigns on startup
+loadCampaigns();
+
 async function startSock() {
     try {
         // Create auth directory if it doesn't exist
@@ -230,6 +269,116 @@ app.get('/status', async (req, res) => {
         phone: connectionState.phone,
         server: 'ready'
     });
+});
+
+// Campaign management endpoints
+app.get('/api/campaigns', (req, res) => {
+    res.json({
+        ongoing: campaigns.ongoing,
+        completed: campaigns.completed,
+        scheduled: campaigns.scheduled
+    });
+});
+
+app.post('/api/campaigns', (req, res) => {
+    try {
+        const campaign = {
+            id: Date.now().toString(),
+            ...req.body,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            createdBy: req.body.createdBy || 'Unknown User'
+        };
+
+        // Add to appropriate category
+        if (campaign.status === 'ongoing') {
+            campaigns.ongoing.push(campaign);
+        } else if (campaign.status === 'completed') {
+            campaigns.completed.push(campaign);
+        } else if (campaign.status === 'scheduled') {
+            campaigns.scheduled.push(campaign);
+        }
+
+        saveCampaigns();
+        console.log('📊 New campaign added:', campaign.name, 'Status:', campaign.status);
+        
+        res.json({ success: true, campaign });
+    } catch (error) {
+        console.error('Error saving campaign:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+app.put('/api/campaigns/:id', (req, res) => {
+    try {
+        const { id } = req.params;
+        const updates = req.body;
+        
+        // Find campaign in all categories
+        let found = false;
+        let oldCategory = null;
+        let newCategory = updates.status;
+
+        ['ongoing', 'completed', 'scheduled'].forEach(category => {
+            const index = campaigns[category].findIndex(c => c.id === id);
+            if (index !== -1) {
+                oldCategory = category;
+                // Update the campaign
+                campaigns[category][index] = {
+                    ...campaigns[category][index],
+                    ...updates,
+                    updatedAt: new Date().toISOString()
+                };
+                
+                // Move to different category if status changed
+                if (newCategory && newCategory !== category) {
+                    const campaign = campaigns[category].splice(index, 1)[0];
+                    campaign.status = newCategory;
+                    campaigns[newCategory].push(campaign);
+                    console.log('📋 Campaign moved from', category, 'to', newCategory);
+                }
+                
+                found = true;
+                console.log('📝 Campaign updated:', campaigns[newCategory || category].find(c => c.id === id).name);
+            }
+        });
+
+        if (found) {
+            saveCampaigns();
+            res.json({ success: true });
+        } else {
+            res.status(404).json({ success: false, error: 'Campaign not found' });
+        }
+    } catch (error) {
+        console.error('Error updating campaign:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+app.delete('/api/campaigns/:id', (req, res) => {
+    try {
+        const { id } = req.params;
+        let found = false;
+
+        ['ongoing', 'completed', 'scheduled'].forEach(category => {
+            const index = campaigns[category].findIndex(c => c.id === id);
+            if (index !== -1) {
+                const campaign = campaigns[category].splice(index, 1)[0];
+                found = true;
+                console.log('🗑️ Campaign deleted:', campaign.name);
+            }
+        });
+
+        if (found) {
+            saveCampaigns();
+            res.json({ success: true });
+        } else {
+            res.status(404).json({ success: false, error: 'Campaign not found' });
+        }
+    } catch (error) {
+        console.error('Error deleting campaign:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
 });
 
 // Human-like typing simulation

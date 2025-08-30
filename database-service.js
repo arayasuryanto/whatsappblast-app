@@ -6,6 +6,38 @@ class DatabaseService {
         this.currentUser = null;
         this.teamId = null;
         this.listeners = new Map();
+        this.serverUrl = null;
+    }
+
+    // Get server URL for API calls
+    getServerUrl() {
+        if (this.serverUrl) return this.serverUrl;
+        
+        try {
+            const currentHost = window.location.hostname;
+            const currentProtocol = window.location.protocol;
+            const currentPort = window.location.port;
+            
+            if (currentHost === 'localhost' || currentHost === '127.0.0.1') {
+                this.serverUrl = `${currentProtocol}//${currentHost}:3000`;
+            } else if (currentHost.includes('.railway.app')) {
+                this.serverUrl = `${currentProtocol}//${currentHost}`;
+            } else if (currentHost.includes('.vercel.app')) {
+                this.serverUrl = `${currentProtocol}//${currentHost}`;
+            } else {
+                if (currentPort) {
+                    this.serverUrl = `${currentProtocol}//${currentHost}:${currentPort}`;
+                } else {
+                    this.serverUrl = `${currentProtocol}//${currentHost}`;
+                }
+            }
+            
+            return this.serverUrl;
+        } catch (error) {
+            console.error('❌ Error detecting server URL:', error);
+            this.serverUrl = '';
+            return this.serverUrl;
+        }
     }
 
     // Initialize Firebase (or fallback to local sync)
@@ -289,7 +321,7 @@ class DatabaseService {
         });
     }
 
-    // Campaign Management
+    // Campaign Management with server sync
     async saveCampaign(campaign) {
         try {
             const campaignId = 'campaign_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
@@ -307,6 +339,29 @@ class DatabaseService {
             this.syncData.campaigns.push(campaignData);
             this.saveLocal('sync_campaigns', this.syncData.campaigns);
             
+            // Save to server for team persistence
+            try {
+                const serverUrl = this.getServerUrl();
+                const response = await fetch(`${serverUrl}/api/campaigns`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        ...campaignData,
+                        createdBy: this.currentUser.name
+                    })
+                });
+                
+                if (response.ok) {
+                    console.log('📡 Campaign synced to server:', campaignId);
+                } else {
+                    console.warn('⚠️ Failed to sync campaign to server');
+                }
+            } catch (syncError) {
+                console.warn('⚠️ Server sync error:', syncError.message);
+            }
+            
             // Log activity
             await this.logActivity('campaign_created', {
                 campaignId: campaignId,
@@ -314,7 +369,7 @@ class DatabaseService {
                 contactCount: campaign.contacts?.length || 0
             });
             
-            console.log('📋 Campaign saved:', campaignId);
+            console.log('📋 Campaign saved locally and synced:', campaignId);
             
             // Trigger callbacks to update UI immediately
             setTimeout(() => this.triggerCallbacks(), 100);
@@ -337,13 +392,38 @@ class DatabaseService {
                     status,
                     updatedAt: Date.now(),
                     updatedBy: this.currentUser.uid,
+                    updatedByName: this.currentUser.name,
                     ...additionalData
                 };
                 
                 this.syncData.campaigns[campaignIndex] = updateData;
                 this.saveLocal('sync_campaigns', this.syncData.campaigns);
                 
-                console.log('📝 Campaign updated:', campaignId, status);
+                // Update on server for team sync
+                try {
+                    const serverUrl = this.getServerUrl();
+                    const response = await fetch(`${serverUrl}/api/campaigns/${campaignId}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            status,
+                            updatedBy: this.currentUser.name,
+                            ...additionalData
+                        })
+                    });
+                    
+                    if (response.ok) {
+                        console.log('📡 Campaign status synced to server:', campaignId, status);
+                    } else {
+                        console.warn('⚠️ Failed to sync campaign status to server');
+                    }
+                } catch (syncError) {
+                    console.warn('⚠️ Server sync error:', syncError.message);
+                }
+                
+                console.log('📝 Campaign updated locally and synced:', campaignId, status);
                 
                 // Trigger callbacks to update UI
                 setTimeout(() => this.triggerCallbacks(), 100);
@@ -357,6 +437,9 @@ class DatabaseService {
 
     async getCampaigns(callback) {
         try {
+            // Load campaigns from server first for team sync
+            await this.loadCampaignsFromServer();
+            
             // Return current campaigns and set up listener
             const campaigns = [...this.syncData.campaigns];
             callback(campaigns);
@@ -368,6 +451,58 @@ class DatabaseService {
         } catch (error) {
             console.error('Error getting campaigns:', error);
             callback([]);
+        }
+    }
+
+    async loadCampaignsFromServer() {
+        try {
+            const serverUrl = this.getServerUrl();
+            const response = await fetch(`${serverUrl}/api/campaigns`, {
+                method: 'GET',
+                headers: {
+                    'Cache-Control': 'no-cache'
+                }
+            });
+            
+            if (response.ok) {
+                const serverCampaigns = await response.json();
+                
+                // Merge server campaigns with local campaigns
+                const allCampaigns = [
+                    ...serverCampaigns.ongoing || [],
+                    ...serverCampaigns.completed || [],
+                    ...serverCampaigns.scheduled || []
+                ];
+                
+                // Remove duplicates (prefer server data)
+                const uniqueCampaigns = [];
+                const serverIds = allCampaigns.map(c => c.id);
+                
+                // Add all server campaigns
+                uniqueCampaigns.push(...allCampaigns);
+                
+                // Add local campaigns that aren't on server yet
+                this.syncData.campaigns.forEach(localCampaign => {
+                    if (!serverIds.includes(localCampaign.id)) {
+                        uniqueCampaigns.push(localCampaign);
+                    }
+                });
+                
+                // Update local data with merged campaigns
+                this.syncData.campaigns = uniqueCampaigns;
+                this.saveLocal('sync_campaigns', this.syncData.campaigns);
+                
+                console.log('📡 Loaded campaigns from server:', {
+                    total: uniqueCampaigns.length,
+                    ongoing: (serverCampaigns.ongoing || []).length,
+                    completed: (serverCampaigns.completed || []).length,
+                    scheduled: (serverCampaigns.scheduled || []).length
+                });
+            } else {
+                console.warn('⚠️ Failed to load campaigns from server');
+            }
+        } catch (error) {
+            console.warn('⚠️ Server load error:', error.message);
         }
     }
 
